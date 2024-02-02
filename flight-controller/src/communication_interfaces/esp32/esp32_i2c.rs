@@ -7,9 +7,7 @@ use esp_idf_svc::hal::{
 pub struct Esp32I2CAdapter;
 
 impl Esp32I2CAdapter {
-    pub fn get_i2c_driver() -> I2cDriver<'static> {
-        let peripherals = Peripherals::take().unwrap();
-
+    pub fn get_i2c_driver(peripherals: Peripherals) -> I2cDriver<'static> {
         let sda = peripherals.pins.gpio21;
         let scl = peripherals.pins.gpio22;
         let i2c = peripherals.i2c0;
