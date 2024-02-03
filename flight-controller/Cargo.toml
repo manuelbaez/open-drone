@@ -33,6 +33,7 @@ esp-idf-svc = { version = "0.48.0", default-features = false }
 mpu6050 = "0.1.6"
 embedded-hal = { version = "1.0.0", package = "embedded-hal" }
 embedded-hal-0-2 = { version = "0.2.7", package = "embedded-hal" }
+rayon = "1.8.1"
 
 [build-dependencies]
 embuild = "0.31.3"
