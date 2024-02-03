@@ -25,55 +25,41 @@ where
     pub channel: P,
 }
 
-pub struct MotorsController {
-    motor_drivers: Vec<LedcDriver<'static>>,
+pub struct MotorController {
+    motor_driver: LedcDriver<'static>,
 }
 
-impl MotorsController {
+impl MotorController {
     pub fn new<C: LedcChannel, T: LedcTimer>(
-        motor_configs: Vec<MotorConfig<impl IOPin, impl Peripheral<P = T>, impl Peripheral<P = C>>>,
+        motor_config: MotorConfig<impl IOPin, impl Peripheral<P = T>, impl Peripheral<P = C>>,
     ) -> Self {
         let config = TimerConfig::default()
             .frequency(4.kHz().into())
             .resolution(Resolution::Bits14);
 
-        let drivers = motor_configs
-            .into_iter()
-            .map(|mut motor_config| {
-                let timer_driver = LedcTimerDriver::new(motor_config.timer, &config).unwrap();
-                LedcDriver::new(motor_config.channel, timer_driver, motor_config.pin).unwrap()
-            })
-            .collect();
+        let timer_driver = LedcTimerDriver::new(motor_config.timer, &config).unwrap();
+        let mut driver =
+            LedcDriver::new(motor_config.channel, timer_driver, motor_config.pin).unwrap();
+        driver.set_duty(MIN_MOTOR_DUTY);
 
-        // let config = TimerConfig::default()
-        //     .frequency(4.kHz().into())
-        //     .resolution(Resolution::Bits14);
-
-        // let timer_driver = LedcTimerDriver::new(peripherals.ledc.timer0, &config).unwrap();
-        // let mut driver = LedcDriver::new(
-        //     peripherals.ledc.channel0,
-        //     timer_driver,
-        //     peripherals.pins.gpio14,
-        // )
-        // .unwrap();
-
-        // let drivers: Vec<LedcDriver> = vec![driver];
-        MotorsController {
-            motor_drivers: drivers,
+        MotorController {
+            motor_driver: driver,
         }
     }
 
-    pub fn calibrate_drivers(&mut self) {
-        self.motor_drivers.par_iter_mut().for_each(|driver| {
-            log::info!("Set Max Duty");
-            let _ = driver.set_duty(MAX_MOTOR_DUTY).unwrap();
-            FreeRtos::delay_ms(10000);
-            log::info!("Set min duty");
-            let _ = driver.set_duty(MIN_MOTOR_DUTY).unwrap();
-        });
+    pub fn calibrate_esc(&mut self) {
+        log::info!("Set Max Duty");
+        let _ = self.motor_driver.set_duty(MAX_MOTOR_DUTY).unwrap();
+        FreeRtos::delay_ms(5000);
+        log::info!("Set min duty");
+        let _ = self.motor_driver.set_duty(MIN_MOTOR_DUTY).unwrap();
+        FreeRtos::delay_ms(8000);
     }
 
-    pub fn set_motor_speed(&mut self, motor_number: u8, speed: u32) {
-        self.motor_drivers[0].set_duty(speed);
+    pub fn set_motor_speed(&mut self, speed: f32) {
+        let duty = (((MAX_MOTOR_DUTY - MIN_MOTOR_DUTY) as f32) * speed / 100.0_f32
+            + MIN_MOTOR_DUTY as f32) as u32;
+        log::info!("Set duty {}-{}", speed, duty);
+        let _ =self.motor_driver.set_duty(duty).unwrap();
     }
 }

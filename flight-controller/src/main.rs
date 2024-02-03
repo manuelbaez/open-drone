@@ -6,6 +6,7 @@ mod output;
 mod util;
 use embedded_hal::delay::DelayNs;
 use esp_idf_svc::hal::ledc::config::TimerConfig;
+use esp_idf_svc::hal::peripheral::Peripheral;
 use esp_idf_svc::hal::prelude::*;
 use esp_idf_svc::hal::{
     delay::FreeRtos,
@@ -13,11 +14,13 @@ use esp_idf_svc::hal::{
     peripherals::Peripherals,
 };
 use mpu6050::*;
+use rayon::prelude::*;
 use std::sync::{Arc, RwLock};
 
+use crate::output::motors_state_manager::MotorsStateManager;
 use crate::{
     communication_interfaces::i2c::I2CAdapterFactory,
-    output::motor_controller::{MotorConfig, MotorsController},
+    output::motor_controller::{MotorConfig, MotorController},
 };
 
 fn main() {
@@ -25,8 +28,19 @@ fn main() {
     esp_idf_svc::log::EspLogger::initialize_default();
 
     log::info!("Running");
+    // rayon::ThreadPoolBuilder::new().num_threads(4).stack_size(4096).build_global().unwrap();
 
     let peripherals: Peripherals = Peripherals::take().unwrap();
+
+    let mut motors_states = MotorsStateManager::new();
+    motors_states.initialize_motor_controllers(peripherals);
+    motors_states.initialize_esc();
+    motors_states.set_motor_values(vec![1.0_f32, 1.0_f32, 1.0_f32, 1.0_f32]);
+    FreeRtos::delay_ms(2000);
+    motors_states.set_motor_values(vec![100.0_f32, 100.0_f32, 100.0_f32, 100.0_f32]);
+    FreeRtos::delay_ms(1500);
+    motors_states.set_motor_values(vec![0.0_f32, 0.0_f32, 0.0_f32, 0.0_f32]);
+
     // // let peripherals_arc = Arc::new(peripherals);
 
     // let i2c_driver = I2CAdapterFactory::get_i2c_adapter(peripherals);
@@ -63,14 +77,25 @@ fn main() {
     //     });
     // }
 
-    let motors_controller = MotorsController::new(
-        vec![MotorConfig {
-            pin: peripherals.pins.gpio14,
-            channel: peripherals.ledc.channel0,
-            timer: peripherals.ledc.timer0,
-        }],
-    );
+    // drivers[0].calibrate_driver();
 
+    // drivers.iter_mut().for_each(|driver| {
+    //     driver.set_motor_speed(10.0_f32);
+    // });
+    // FreeRtos::delay_ms(5000);
+    // drivers.iter_mut().for_each(|driver| {
+    //     driver.set_motor_speed(50.0_f32);
+    // });
+    // FreeRtos::delay_ms(1000);
+    // drivers.iter_mut().for_each(|driver| {
+    //     driver.set_motor_speed(70.0_f32);
+    // });
+    // FreeRtos::delay_ms(1000);
+    // drivers.iter_mut().for_each(|driver| {
+    //     driver.set_motor_speed(0.0_f32);
+    // });
+    // motor_2_controller.calibrate_driver();
+    // motor_2_controller.set_motor_speed(20.0_f32);
     // let config = TimerConfig::default()
     //     .frequency(4.kHz().into())
     //     .resolution(Resolution::Bits14);
