@@ -22,6 +22,7 @@ use std::sync::{Arc, RwLock};
 use std::time::SystemTime;
 
 use crate::control::integrator::Integrator;
+use crate::control::kalman_filter::{self, KalmanFilter};
 use crate::output::motors_state_manager::MotorsStateManager;
 use crate::{
     communication_interfaces::i2c::*,
@@ -67,9 +68,9 @@ fn main() {
     // ])); // roll-pitch-yaw
 
     let gyro_angles_kalman = Arc::new(RwLock::new([
-        [0.0_f64, 0.0_f64, 0.0_f64],
-        [0.0_f64, 0.0_f64, 0.0_f64],
-        [0.0_f64, 0.0_f64, 0.0_f64],
+        [0.0_f64, 0.0_f64],
+        [0.0_f64, 0.0_f64],
+        [0.0_f64, 0.0_f64],
     ])); // roll-pitch-yaw
 
     let mpu_lock = Arc::new(RwLock::new(mpu));
@@ -86,9 +87,11 @@ fn main() {
             let mut previous_time_us = 0_u128;
             const GYRO_DRIFT_DEG: f64 = 3.0_f64;
             const ACCEL_UNCERTAINTY_DEG: f64 = 3.0_f64;
-            // let mut kamal_gain = 0.0_f64;
-            let mut kalmal_pitch_prediction: f64 = 0.0_f64;
-            let mut kalman_pitch_uncertainty = 0.0_f64;
+
+            let mut pitch_kalman_filter: KalmanFilter =
+                KalmanFilter::new(GYRO_DRIFT_DEG, ACCEL_UNCERTAINTY_DEG);
+            let mut roll_kalman_filter: KalmanFilter =
+                KalmanFilter::new(GYRO_DRIFT_DEG, ACCEL_UNCERTAINTY_DEG);
 
             loop {
                 let mut driver = shared_mpu.write().unwrap();
@@ -98,34 +101,38 @@ fn main() {
                 let current_time_us: u128 = system_time.elapsed().unwrap().as_micros();
 
                 let pitch_rate_deg = gyro_angles[1] as f64 * 180.0_f64 / std::f64::consts::PI;
+                let roll_rate_deg = gyro_angles[0] as f64 * 180.0_f64 / std::f64::consts::PI;
 
                 let accel_pitch_deg =
                     accelerometer_roll_pitch[1] as f64 * 180.0_f64 / std::f64::consts::PI;
+                let accel_roll_deg =
+                    accelerometer_roll_pitch[0] as f64 * 180.0_f64 / std::f64::consts::PI;
 
                 let time_since_last_reading_seconds =
                     (current_time_us - previous_time_us) as f64 / 1_000_000.0_f64;
                 previous_time_us = current_time_us;
 
-                // Apply pitch kalman filter
+                pitch_kalman_filter.apply_flilter_update(
+                    pitch_rate_deg,
+                    accel_pitch_deg,
+                    time_since_last_reading_seconds,
+                );
 
-                kalmal_pitch_prediction = kalmal_pitch_prediction
-                    + time_since_last_reading_seconds * pitch_rate_deg as f64;
+                roll_kalman_filter.apply_flilter_update(
+                    roll_rate_deg,
+                    accel_roll_deg,
+                    time_since_last_reading_seconds,
+                );
 
-                kalman_pitch_uncertainty = kalman_pitch_uncertainty
-                    + time_since_last_reading_seconds.powf(2.0) * GYRO_DRIFT_DEG.powf(2.0);
-
-                let kamal_gain = kalman_pitch_uncertainty
-                    / (kalman_pitch_uncertainty + ACCEL_UNCERTAINTY_DEG.powf(2.0));
-
-                kalmal_pitch_prediction = kalmal_pitch_prediction
-                    + kamal_gain * (accel_pitch_deg as f64 - kalmal_pitch_prediction);
-
-                kalman_pitch_uncertainty = (1.0_f64 - kamal_gain) * kalman_pitch_uncertainty;
 
                 let mut angles = gyro_angles_kalman.write().unwrap();
-                angles[1][0] = kalmal_pitch_prediction;
-                angles[1][1] = kalman_pitch_uncertainty;
-                angles[1][2] = kamal_gain;
+
+                angles[0][0] = roll_kalman_filter.get_current_state();
+                angles[0][1] = roll_kalman_filter.get_current_uncertainty();
+
+                angles[1][0] = pitch_kalman_filter.get_current_state();
+                angles[1][1] = pitch_kalman_filter.get_current_uncertainty();
+
 
                 drop(driver);
                 drop(angles);
@@ -146,15 +153,7 @@ fn main() {
             });
     }
 
-    // for _ in [1..5] {
-    //     //
+    // loop {
+    //     FreeRtos::delay_ms(1000);
     // }
-    // let gyro_value = mpu.get_gyro().unwrap();
-
-    // let time_b = system_time.elapsed().unwrap().as_micros();
-
-    // print!("Cuurent time {} {} \n", time_b - time_a,  gyro_value[0]);
-    loop {
-        FreeRtos::delay_ms(1000);
-    }
 }
