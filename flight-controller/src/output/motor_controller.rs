@@ -7,22 +7,21 @@ use esp_idf_svc::hal::{
     delay::FreeRtos,
     gpio::IOPin,
     ledc::{config::TimerConfig, LedcDriver, LedcTimerDriver, Resolution},
-    peripherals::Peripherals,
 };
 use rayon::prelude::*;
 
 const MIN_MOTOR_DUTY: u32 = 8192;
 const MAX_MOTOR_DUTY: u32 = 16000;
 
-pub struct MotorConfig<T, S, P>
+pub struct MotorConfig<TPin, TTimer, TChannel>
 where
-    T: Peripheral + 'static,
-    S: Peripheral + 'static,
-    P: Peripheral + 'static,
+    TPin: Peripheral + 'static,
+    TTimer: Peripheral + 'static,
+    TChannel: Peripheral + 'static,
 {
-    pub pin: T,
-    pub timer: S,
-    pub channel: P,
+    pub pin: TPin,
+    pub timer: TTimer,
+    pub channel: TChannel,
 }
 
 pub struct MotorController {
@@ -40,7 +39,7 @@ impl MotorController {
         let timer_driver = LedcTimerDriver::new(motor_config.timer, &config).unwrap();
         let mut driver =
             LedcDriver::new(motor_config.channel, timer_driver, motor_config.pin).unwrap();
-        driver.set_duty(MIN_MOTOR_DUTY);
+        let _ = driver.set_duty(MIN_MOTOR_DUTY).unwrap();
 
         MotorController {
             motor_driver: driver,
@@ -60,6 +59,6 @@ impl MotorController {
         let duty = (((MAX_MOTOR_DUTY - MIN_MOTOR_DUTY) as f32) * speed / 100.0_f32
             + MIN_MOTOR_DUTY as f32) as u32;
         log::info!("Set duty {}-{}", speed, duty);
-        let _ =self.motor_driver.set_duty(duty).unwrap();
+        let _ = self.motor_driver.set_duty(duty).unwrap();
     }
 }
