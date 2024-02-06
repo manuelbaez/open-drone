@@ -15,21 +15,21 @@ impl MotorsStateManager {
 
     pub fn initialize_motor_controllers(&mut self, peripherals: &mut Peripherals) {
         let motor_1_controller = MotorController::new(MotorConfig {
-            pin: unsafe { peripherals.pins.gpio14.clone_unchecked() },
+            pin: unsafe { peripherals.pins.gpio13.clone_unchecked() },
             channel: unsafe { peripherals.ledc.channel0.clone_unchecked() },
             timer: unsafe { peripherals.ledc.timer0.clone_unchecked() },
         });
         self.controllers.push(motor_1_controller);
 
         let motor_2_controller = MotorController::new(MotorConfig {
-            pin: unsafe { peripherals.pins.gpio13.clone_unchecked() },
+            pin: unsafe { peripherals.pins.gpio12.clone_unchecked() },
             channel: unsafe { peripherals.ledc.channel1.clone_unchecked() },
             timer: unsafe { peripherals.ledc.timer0.clone_unchecked() },
         });
         self.controllers.push(motor_2_controller);
 
         let motor_3_controller = MotorController::new(MotorConfig {
-            pin: unsafe { peripherals.pins.gpio12.clone_unchecked() },
+            pin: unsafe { peripherals.pins.gpio14.clone_unchecked() },
             channel: unsafe { peripherals.ledc.channel2.clone_unchecked() },
             timer: unsafe { peripherals.ledc.timer0.clone_unchecked() },
         });

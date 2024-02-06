@@ -1,29 +1,29 @@
 pub struct KalmanFilter {
-    state_prediction: f64,
-    prediction_uncertainty: f64,
-    input_variance: f64,
-    measurement_uncertainty: f64,
+    state_prediction: f32,
+    prediction_uncertainty: f32,
+    input_variance: f32,
+    measurement_uncertainty: f32,
 }
 
 impl KalmanFilter {
-    pub fn new(input_variance: f64, measurement_uncertainty: f64) -> Self {
+    pub fn new(input_variance: f32, measurement_uncertainty: f32) -> Self {
         KalmanFilter {
             input_variance,
             measurement_uncertainty,
-            state_prediction: 0.0_f64,
-            prediction_uncertainty: 0.0_f64,
+            state_prediction: 0.0_f32,
+            prediction_uncertainty: 0.0_f32,
         }
     }
    pub fn apply_flilter_update(
         &mut self,
-        current_rate: f64,
-        measured_value: f64,
-        t_interval_seconds: f64,
+        current_rate: f32,
+        measured_value: f32,
+        t_interval_seconds: f32,
     ) {
         let mut state_prediction = self.state_prediction.clone();
         let mut prediction_uncertainty = self.prediction_uncertainty.clone();
 
-        state_prediction = self.state_prediction + t_interval_seconds * current_rate as f64;
+        state_prediction = self.state_prediction + t_interval_seconds * current_rate as f32;
 
         prediction_uncertainty =
             prediction_uncertainty + t_interval_seconds.powf(2.0) * self.input_variance.powf(2.0);
@@ -32,18 +32,18 @@ impl KalmanFilter {
             / (prediction_uncertainty + self.measurement_uncertainty.powf(2.0));
 
         state_prediction =
-            state_prediction + kamal_gain * (measured_value as f64 - state_prediction);
+            state_prediction + kamal_gain * (measured_value as f32 - state_prediction);
 
-        prediction_uncertainty = (1.0_f64 - kamal_gain) * prediction_uncertainty;
+        prediction_uncertainty = (1.0_f32 - kamal_gain) * prediction_uncertainty;
 
         self.state_prediction = state_prediction;
         self.prediction_uncertainty = prediction_uncertainty;
     }
 
-    pub fn get_current_state(&self) -> f64 {
+    pub fn get_current_state(&self) -> f32 {
         self.state_prediction
     }
-    pub fn get_current_uncertainty(&self) -> f64 {
+    pub fn get_current_uncertainty(&self) -> f32 {
         self.prediction_uncertainty
     }
 }

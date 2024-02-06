@@ -8,9 +8,9 @@ use esp_idf_svc::hal::{
 };
 
 pub trait I2cGenericDriver =
-    I2c<Error = I2cError> + Write<Error = I2cError> + WriteRead<Error = I2cError>;
+    I2c<Error = I2cError> + Write<Error = I2cError> + WriteRead<Error = I2cError> + Send;
 
-pub fn get_i2c_driver(peripherals: &mut Peripherals) -> impl I2cGenericDriver {
+pub fn get_i2c_driver(peripherals: &mut Peripherals) ->  I2cDriver<'static> {
     let sda = unsafe { peripherals.pins.gpio21.clone_unchecked() };
     let scl = unsafe { peripherals.pins.gpio22.clone_unchecked() };
     let i2c = unsafe { peripherals.i2c0.clone_unchecked() };

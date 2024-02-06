@@ -1,5 +1,3 @@
-use std::borrow::BorrowMut;
-
 use esp_idf_svc::hal::ledc::{LedcChannel, LedcTimer};
 use esp_idf_svc::hal::peripheral::Peripheral;
 use esp_idf_svc::hal::prelude::*;
@@ -8,7 +6,6 @@ use esp_idf_svc::hal::{
     gpio::IOPin,
     ledc::{config::TimerConfig, LedcDriver, LedcTimerDriver, Resolution},
 };
-use rayon::prelude::*;
 
 const MIN_MOTOR_DUTY: u32 = 8192;
 const MAX_MOTOR_DUTY: u32 = 16000;
