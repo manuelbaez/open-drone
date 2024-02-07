@@ -1,6 +1,7 @@
 use esp_idf_svc::hal::delay::FreeRtos;
 use libm::{atan2f, sqrtf};
 use mpu6050::Mpu6050;
+use nalgebra::ComplexField;
 
 use crate::I2cGenericDriver;
 
@@ -8,6 +9,8 @@ use super::{
     imu_sensor_traits::{Accelerometer, Gyroscope},
     vectors::{AccelerationVector3D, RotationVector2D, RotationVector3D},
 };
+
+const GYRO_HIGHPASS_FILTER: f32 = 0.6;
 
 pub struct MPU6050Sensor<I> {
     driver: Mpu6050<I>,
@@ -74,10 +77,26 @@ where
     fn get_rotation_rates(&mut self) -> RotationVector3D {
         let gyro_rates = self.driver.get_gyro().unwrap();
 
+        let roll = gyro_rates[0].to_degrees() - self.gyro_rate_calibration.roll;
+        let pitch = gyro_rates[1].to_degrees() - self.gyro_rate_calibration.pitch;
+        let yaw = gyro_rates[2].to_degrees() - self.gyro_rate_calibration.yaw;
+
         RotationVector3D {
-            roll: gyro_rates[0].to_degrees() - self.gyro_rate_calibration.roll,
-            pitch: gyro_rates[1].to_degrees() - self.gyro_rate_calibration.pitch,
-            yaw: gyro_rates[2].to_degrees() - self.gyro_rate_calibration.yaw,
+            roll: if roll.abs() > GYRO_HIGHPASS_FILTER {
+                roll
+            } else {
+                0.0
+            },
+            pitch: if pitch.abs() > GYRO_HIGHPASS_FILTER {
+                pitch
+            } else {
+                0.0
+            },
+            yaw: if yaw.abs() > GYRO_HIGHPASS_FILTER {
+                yaw
+            } else {
+                0.0
+            },
         }
     }
 }

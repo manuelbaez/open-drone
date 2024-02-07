@@ -55,7 +55,7 @@ impl MotorController {
     pub fn set_motor_speed(&mut self, speed: f32) {
         let duty = (((MAX_MOTOR_DUTY - MIN_MOTOR_DUTY) as f32) * speed / 100.0_f32
             + MIN_MOTOR_DUTY as f32) as u32;
-        log::info!("Set duty {}-{}", speed, duty);
+        // log::info!("Set duty {}-{}", speed, duty);
         let _ = self.motor_driver.set_duty(duty).unwrap();
     }
 }

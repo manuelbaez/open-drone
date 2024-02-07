@@ -36,23 +36,23 @@ fn main() {
 
     let mut motors_states = MotorsStateManager::new();
     motors_states.initialize_motor_controllers(&mut peripherals);
+    motors_states.initialize_esc();
 
-    let _ = std::thread::Builder::new().stack_size(4096).spawn(move || {
-        motors_states.initialize_esc();
+    // let _ = std::thread::Builder::new().stack_size(4096).spawn(move || {
 
-        motors_states.set_motor_power(vec![10.0_f32, 10.0_f32, 10.0_f32, 10.0_f32]);
-        FreeRtos::delay_ms(12000);
-        //     motors_states.set_motor_power(vec![50.0_f32, 50.0_f32, 50.0_f32, 50.0_f32]);
-        //     FreeRtos::delay_ms(1500);
-        motors_states.set_motor_power(vec![3.0_f32, 3.0_f32, 3.0_f32, 3.0_f32]);
-        FreeRtos::delay_ms(2000);
-        motors_states.set_motor_power(vec![0.0_f32, 0.0_f32, 0.0_f32, 0.0_f32]);
-    });
+    //     motors_states.set_motor_power(vec![10.0_f32, 10.0_f32, 10.0_f32, 10.0_f32]);
+    //     FreeRtos::delay_ms(12000);
+    //     //     motors_states.set_motor_power(vec![50.0_f32, 50.0_f32, 50.0_f32, 50.0_f32]);
+    //     //     FreeRtos::delay_ms(1500);
+    //     motors_states.set_motor_power(vec![3.0_f32, 3.0_f32, 3.0_f32, 3.0_f32]);
+    //     FreeRtos::delay_ms(2000);
+    //     motors_states.set_motor_power(vec![0.0_f32, 0.0_f32, 0.0_f32, 0.0_f32]);
+    // });
 
     // // let peripherals_arc = Arc::new(peripherals);
 
     let i2c_driver = get_i2c_driver(&mut peripherals);
 
-    init_flight_stabilizer_thread(i2c_driver);
+    init_flight_stabilizer_thread(i2c_driver , motors_states);
 
 }
