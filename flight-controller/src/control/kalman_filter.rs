@@ -20,10 +20,9 @@ impl KalmanFilter {
         measured_value: f32,
         t_interval_seconds: f32,
     ) {
-        let mut state_prediction = self.state_prediction.clone();
         let mut prediction_uncertainty = self.prediction_uncertainty.clone();
 
-        state_prediction = self.state_prediction + t_interval_seconds * current_rate as f32;
+        let mut state_prediction = self.state_prediction + t_interval_seconds * current_rate as f32;
 
         prediction_uncertainty =
             prediction_uncertainty + t_interval_seconds.powf(2.0) * self.input_variance.powf(2.0);
