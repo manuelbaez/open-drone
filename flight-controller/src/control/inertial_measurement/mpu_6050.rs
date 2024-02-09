@@ -1,7 +1,6 @@
 use esp_idf_svc::hal::delay::FreeRtos;
 use libm::{atan2f, sqrtf};
 use mpu6050::Mpu6050;
-use nalgebra::ComplexField;
 
 use crate::I2cGenericDriver;
 
@@ -10,7 +9,7 @@ use super::{
     vectors::{AccelerationVector3D, RotationVector2D, RotationVector3D},
 };
 
-const GYRO_HIGHPASS_FILTER: f32 = 0.6;
+const GYRO_HIGHPASS_FILTER: f32 = 0.1;
 
 pub struct MPU6050Sensor<I> {
     driver: Mpu6050<I>,

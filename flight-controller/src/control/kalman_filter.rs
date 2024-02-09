@@ -14,12 +14,12 @@ impl KalmanFilter {
             prediction_uncertainty: 0.0_f32,
         }
     }
-   pub fn apply_flilter_update(
+    pub fn update_next_prediction(
         &mut self,
         current_rate: f32,
         measured_value: f32,
         t_interval_seconds: f32,
-    ) {
+    ) -> f32 {
         let mut prediction_uncertainty = self.prediction_uncertainty.clone();
 
         let mut state_prediction = self.state_prediction + t_interval_seconds * current_rate as f32;
@@ -37,12 +37,14 @@ impl KalmanFilter {
 
         self.state_prediction = state_prediction;
         self.prediction_uncertainty = prediction_uncertainty;
-    }
 
-    pub fn get_current_state(&self) -> f32 {
         self.state_prediction
     }
-    pub fn get_current_uncertainty(&self) -> f32 {
-        self.prediction_uncertainty
-    }
+
+    // pub fn get_current_state(&self) -> f32 {
+    //     self.state_prediction
+    // }
+    // pub fn get_current_uncertainty(&self) -> f32 {
+    //     self.prediction_uncertainty
+    // }
 }

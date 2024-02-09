@@ -3,7 +3,7 @@ pub struct PID {
     proportional_multiplier: f32,
     integral_multiplier: f32,
     derivative_multiplier: f32,
-    previous_integral_error: f32,
+    accumulated_error: f32,
 }
 
 impl PID {
@@ -17,29 +17,27 @@ impl PID {
             proportional_multiplier,
             integral_multiplier,
             derivative_multiplier,
-            previous_integral_error: 0.0_f32,
+            accumulated_error: 0.0_f32,
         }
     }
 
-    pub fn update(
+    pub fn get_update(
         &mut self,
         desired_state: f32,
         measured_state: f32,
         iteration_length: f32,
     ) -> f32 {
         let error = desired_state - measured_state;
-
-        let change_rate = (error - self.previous_error) / iteration_length;
-
         let proportional_output = error * self.proportional_multiplier;
 
-        let integral_error = ((error + self.previous_integral_error) / 2.0) * iteration_length;
-        let integral_output = self.integral_multiplier * integral_error;
+        self.accumulated_error += error * iteration_length;
+        let integral_output = self.integral_multiplier * self.accumulated_error;
 
+        let change_rate = (error - self.previous_error) / iteration_length;
         let derivative_output = change_rate * self.derivative_multiplier;
 
-        self.previous_integral_error = integral_error;
         self.previous_error = error;
+        
         proportional_output + integral_output + derivative_output
     }
 }
