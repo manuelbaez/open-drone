@@ -3,7 +3,9 @@ use esp_idf_svc::sys::{
     esp_wifi_set_promiscuous_filter, esp_wifi_set_promiscuous_rx_cb, esp_wifi_set_storage,
     esp_wifi_start, g_wifi_default_wpa_crypto_funcs, g_wifi_feature_caps, g_wifi_osi_funcs,
     nvs_flash_init, wifi_init_config_t, wifi_mode_t_WIFI_MODE_NULL, wifi_osi_funcs_t,
-    wifi_promiscuous_filter_t, wifi_promiscuous_pkt_t, wifi_second_chan_t_WIFI_SECOND_CHAN_NONE,
+    wifi_promiscuous_filter_t, wifi_promiscuous_pkt_t, wifi_promiscuous_pkt_type_t,
+    wifi_promiscuous_pkt_type_t_WIFI_PKT_CTRL, wifi_promiscuous_pkt_type_t_WIFI_PKT_DATA,
+    wifi_promiscuous_pkt_type_t_WIFI_PKT_MGMT, wifi_second_chan_t_WIFI_SECOND_CHAN_NONE,
     wifi_storage_t_WIFI_STORAGE_RAM, CONFIG_ESP_WIFI_DYNAMIC_RX_BUFFER_NUM,
     CONFIG_ESP_WIFI_ESPNOW_MAX_ENCRYPT_NUM, CONFIG_ESP_WIFI_STATIC_RX_BUFFER_NUM,
     CONFIG_ESP_WIFI_TX_BUFFER_TYPE, WIFI_AMPDU_RX_ENABLED, WIFI_AMPDU_TX_ENABLED,
@@ -13,6 +15,7 @@ use esp_idf_svc::sys::{
     WIFI_PROMIS_FILTER_MASK_MGMT, WIFI_SOFTAP_BEACON_MAX_LEN, WIFI_STATIC_TX_BUFFER_NUM,
     WIFI_STA_DISCONNECTED_PM_ENABLED, WIFI_TASK_CORE_ID,
 };
+use libwifi::{frame::Beacon, Frame};
 use std::ffi::c_void;
 
 #[repr(C, packed)]
@@ -23,8 +26,8 @@ struct MacAddr {
 struct WifiPacketPayload {
     fctl: u16,
     duration: u16,
-    da: MacAddr,
-    sa: MacAddr,
+    destination_address: MacAddr,
+    source_address: MacAddr,
     bssid: MacAddr,
     seqctl: u16,
     addr_4: MacAddr,
@@ -34,17 +37,53 @@ struct WifiPacketPayload {
 pub struct WifiSniffer;
 
 impl WifiSniffer {
-    unsafe extern "C" fn sniffer(buffer: *mut c_void, _handler: u32) {
+    unsafe extern "C" fn sniffer(buffer: *mut c_void, packet_type: wifi_promiscuous_pkt_type_t) {
+        // if packet_type == wifi_promiscuous_pkt_type_t_WIFI_PKT_DATA {
         let packet_pointer: *mut wifi_promiscuous_pkt_t = buffer as *mut wifi_promiscuous_pkt_t;
         let packet = packet_pointer.read();
         let length = packet.rx_ctrl.sig_len();
-        let wifi_packet_payload_pointer = &packet.payload as *const _ as *const WifiPacketPayload;
-        let wifi_packet_payload = wifi_packet_payload_pointer.read();
+
+        let data = core::slice::from_raw_parts_mut(
+            &packet.payload as *const _ as *mut u8,
+            length as usize,
+        );
+
+        // let address_1 = (&data[10] as *const _ as *const MacAddr).read();
+        let payload_pointer = &packet.payload as *const _ as *const WifiPacketPayload;
+        let payload = payload_pointer.read();
+        let duration = payload.bssid;
+        // if data[4] == 0x1c {0
+        log::info!("Got package {:02X?} \n\n\n\n", duration.mac);
+        // }
+        // }
+        // log::info!(
+        //     "Got package {:02X?} \n\n\n\n",
+        //     payload.transmitter_address.mac
+        // );
+        // let wifi_packet_payload_pointer = &packet.payload as *const _ as *const [u8];
+        // packet
+        // let wifi_packet_payload = wifi_packet_payload_pointer.read();
         // wifi_hdr
 
-        let payload = wifi_packet_payload.addr_4;
+        // match libwifi::parse_frame(data) {
+        //     Ok(frame) => {
+        //         match frame {
+        //             Frame::Data(beacon) => {
+        //                 log::info!("Got Data: {:?}", beacon);
+        //             }
+        //             default =>{
+        //                 log::info!("Got frame: {:?} \n\n\n", default);
+        //             }
+        //         }
+        //     }
+        //     Err(err) => {
+        //         // println!("Error during parsing :\n{}", err);
+        //     }
+        // };
 
-        log::info!("Packet {} -- {:?}", length, payload.mac);
+        // let payload = wifi_packet_payload.addr_4;
+
+        // log::info!("Packet {} -- {:?}", length, payload.mac);
     }
 
     unsafe fn get_wifi_default_config() -> wifi_init_config_t {
