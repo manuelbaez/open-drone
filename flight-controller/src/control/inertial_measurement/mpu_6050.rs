@@ -5,7 +5,7 @@ use mpu6050::Mpu6050;
 use crate::I2cGenericDriver;
 
 use super::{
-    imu_sensor_traits::{Accelerometer, Gyroscope},
+    imu_sensors::{Accelerometer, Gyroscope},
     vectors::{AccelerationVector3D, RotationVector2D, RotationVector3D},
 };
 

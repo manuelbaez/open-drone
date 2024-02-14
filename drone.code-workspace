@@ -1,0 +1,13 @@
+{
+  "folders": [
+    {
+      "name": "Root",
+      "path": "."
+    },
+    {
+      "name": "Flight Controller",
+      "path": "./flight-controller"
+    }
+  ],
+  "settings": {}
+}

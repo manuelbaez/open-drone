@@ -1,4 +1,5 @@
 #![feature(trait_alias)]
+#![feature(ptr_metadata)]
 
 mod communication_interfaces;
 mod control;
@@ -30,7 +31,7 @@ fn main() {
 
     let i2c_driver = get_i2c_driver(&mut peripherals);
 
-    // init_flight_stabilizer_thread(i2c_driver, motors_states);
+    init_flight_stabilizer_thread(i2c_driver, motors_states);
 
     unsafe {
         let config = esp_pm_config_t {
@@ -43,7 +44,7 @@ fn main() {
         log::info!("Set core frequency");
     }
 
-    WifiSniffer::init_promiscous(4);
+    WifiSniffer::init_promiscous(13);
 
     loop {
         FreeRtos::delay_ms(1000);

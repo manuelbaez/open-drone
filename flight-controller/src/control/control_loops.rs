@@ -12,7 +12,7 @@ use crate::{
             RotationRateFlightController,
         },
         inertial_measurement::{
-            imu_sensor_traits::{Accelerometer, Gyroscope},
+            imu_sensors::{Accelerometer, Gyroscope},
             mpu_6050::MPU6050Sensor,
             vectors::{AccelerationVector3D, RotationVector2D, RotationVector3D},
         },
@@ -55,7 +55,7 @@ pub fn init_flight_stabilizer_thread(
             const ACCEL_UNCERTAINTY_DEG: f32 = 3.0_f32;
             const MAX_ROTATION_RATE: f32 = 75.0_f32;
             const MIN_POWER: f32 = 10.0_f32;
-            const MAX_POWER: f32 = 60.0_f32;
+            const MAX_POWER: f32 = 20.0_f32;
 
             let mut rotation_mode_flight_controller =
                 RotationRateFlightController::new(MIN_POWER, MAX_POWER);
