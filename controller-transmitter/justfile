@@ -1,0 +1,6 @@
+build:
+    cargo build
+run:
+    sudo ./target/debug/controller-transmitter
+dev:
+    watchexec -r 'just build&& just run'
