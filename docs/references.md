@@ -11,7 +11,7 @@ https://ubuntuforums.org/showthread.php?t=2002796
 https://www.hackster.io/p99will/esp32-wifi-mac-scanner-sniffer-promiscuous-4c12f4
 https://stackoverflow.com/questions/18838451/difference-between-socket-pf-packet-and-socket-af-inet-in-python
 
-
+https://users.rust-lang.org/t/weird-behaviour-reading-from-a-linux-device-event-stream/43816/9
 
 // const WIFI_PACKET: [u8; 41] = [
 //     0x00, 0x00, // <-- radiotap version

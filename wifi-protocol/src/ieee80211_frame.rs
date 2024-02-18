@@ -71,3 +71,13 @@ pub struct IBSSWifiPacketFrame<const DATA_SIZE: usize> {
     pub data: [u8; DATA_SIZE],
     // pub crc: u32, //This is added automagically by the hardware/driver, no idea which one.
 }
+
+#[repr(C, packed)]
+pub struct GenericWifiPacketFrameHeader {
+    pub frame_control: FrameControl,
+    pub duration: u16,
+    pub address_1: MacAddr,                
+    pub address_2: MacAddr,                
+    pub address_3: MacAddr,               
+    pub sequence_control: SequenceControl, 
+}
