@@ -1,4 +1,4 @@
-use super::ieee80211_frame::NoDsWifiPacketFrame;
+use super::ieee80211_frame::IBSSWifiPacketFrame;
 
 // Bits start at 0
 bitflags::bitflags! {
@@ -26,9 +26,10 @@ pub enum WifiChannelFreq {
 #[repr(C, packed)]
 pub struct RadiotapHeaderFields {
     pub rate: DataRate,
-    pub channel_padding: u8, //This is needed because the channel is a 16bit field and need to start at the next 16bit boundary(That's what I understood from the docs)
-    pub channel_freq: WifiChannelFreq,
-    pub channel_flags: u16,
+    /// This apparently has no effect whatsoever on tx frames
+    // pub channel_padding: u8, //This is needed because the channel is a 16bit field and need to start at the next 16bit boundary(That's what I understood from the docs)
+    // pub channel_freq: WifiChannelFreq,
+    // pub channel_flags: u16,
     pub tx_power: u8,
 }
 
@@ -44,5 +45,5 @@ pub struct RadiotapHeader {
 #[repr(C, packed)]
 pub struct RadiotapPacket<const DATA_SIZE: usize> {
     pub header: RadiotapHeader,
-    pub data: NoDsWifiPacketFrame<DATA_SIZE>,
+    pub data: IBSSWifiPacketFrame<DATA_SIZE>,
 }
