@@ -1,3 +1,4 @@
+
 #[repr(u16)]
 pub enum ButtonPressCodes {
     Y = 308,
@@ -19,6 +20,22 @@ pub enum AnalogInputCodes {
     RightY = 4,
     LT = 2,
     RT = 5,
+}
+
+impl TryFrom<u16> for AnalogInputCodes {
+    type Error = ();
+
+    fn try_from(v: u16) -> Result<Self, Self::Error> {
+        match v {
+            x if x == AnalogInputCodes::LeftX as u16 => Ok(AnalogInputCodes::LeftX),
+            x if x == AnalogInputCodes::LeftY as u16 => Ok(AnalogInputCodes::LeftY),
+            x if x == AnalogInputCodes::RightX as u16 => Ok(AnalogInputCodes::RightX),
+            x if x == AnalogInputCodes::RightY as u16 => Ok(AnalogInputCodes::RightY),
+            x if x == AnalogInputCodes::LT as u16 => Ok(AnalogInputCodes::LT),
+            x if x == AnalogInputCodes::RT as u16 => Ok(AnalogInputCodes::RT),
+            _ => Err(()),
+        }
+    }
 }
 
 #[repr(u16)]

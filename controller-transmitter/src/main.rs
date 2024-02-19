@@ -22,7 +22,10 @@ use wifi_protocol::{
     radiotap::{DataRate, RadiotapFlags, RadiotapHeader, RadiotapHeaderFields, RadiotapPacket},
 };
 
-use crate::input::controller::{EventTypes, InputEvent};
+use crate::input::{
+    controller::{EventTypes, InputEvent},
+    ControlInputMapper,
+};
 
 mod input;
 
@@ -100,18 +103,19 @@ fn main() {
     println!("Open Interface!");
     let mut device = Device::from("wlp6s0").open().unwrap();
 
-    let mut file_options = OpenOptions::new();
-    file_options.read(true);
-    file_options.write(false);
+    // let mut file_options = OpenOptions::new();
+    // file_options.read(true);
+    // file_options.write(false);
 
-    let mut dev_file = file_options.open("/dev/input/event23").unwrap();
-
+    // let mut dev_file = file_options.open("/dev/input/event23").unwrap();
+    let control_mapper: ControlInputMapper = ControlInputMapper::new("/dev/input/event23");
+    control_mapper.start_event_handler_thread();
     loop {
-        let struct_size = mem::size_of::<InputEvent>();
-        let event: InputEvent = unsafe { mem::zeroed() };
-        let mut event_buffer =
-            unsafe { slice::from_raw_parts_mut(&event as *const _ as *mut u8, struct_size) };
-        let size = dev_file.read(&mut event_buffer).unwrap();
+        // let struct_size = mem::size_of::<InputEvent>();
+        // let event: InputEvent = unsafe { mem::zeroed() };
+        // let mut event_buffer =
+        //     unsafe { slice::from_raw_parts_mut(&event as *const _ as *mut u8, struct_size) };
+        // let size = dev_file.read(&mut event_buffer).unwrap();
 
         // let mut rdr = Cursor::new(packet);
         // let tv_sec = rdr.read_u64::<NativeEndian>().unwrap();
@@ -124,20 +128,26 @@ fn main() {
         //     event.tv_sec, event.tv_usec, event.evtype, event.code, event.value
         // );
 
-        match event.event_type {
-            EventTypes::ButtonPress => {
-                println!("Button Pressed {}- {}", event.code, event.value);
-            }
-            EventTypes::AnalogInput => {
-                println!("Analog{}- {}", event.code, event.value);
-                // if event.code == AnalogInputCodes::LeftY as u16 {
-                // }
-            }
-            _default => {
-                // println!("Something Pressed {}", _default as u16);
-            }
-        }
+        // match event.event_type {
+        //     EventTypes::ButtonPress => {
+        //         println!("Button Pressed {}- {}", event.code, event.value);
+        //     }
+        //     EventTypes::AnalogInput => {
+        //         println!("Analog{}- {}", event.code, event.value);
+        //         // if event.code == AnalogInputCodes::LeftY as u16 {
+        //         // }
+        //     }
+        //     _default => {
+        //         // println!("Something Pressed {}", _default as u16);
+        //     }
+        // }
+
         build_and_send_packet(&mut device);
-        // sleep(Duration::from_secs(1));
+        let current_input = control_mapper.get_current_input();
+        println!(
+            "Throttle: {} - Pitch: {}- Roll: {}",
+            current_input.throttle, current_input.pitch, current_input.roll
+        );
+        sleep(Duration::from_millis(5));
     }
 }
