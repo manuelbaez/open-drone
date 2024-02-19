@@ -1,8 +1,8 @@
 use bitfield_struct::bitfield;
 
+/// Ordered LSB to MSB
 #[bitfield(u16)]
 pub struct FrameControl {
-    /// Ordered LSB to MSB
     #[bits(2)]
     pub protocol: u8,
     #[bits(2)]
@@ -37,6 +37,7 @@ impl FrameControl {
     }
 }
 
+///Pointless for sending, the physical layer adds it automagically
 #[bitfield(u16)]
 pub struct SequenceControl {
     #[bits(12)]
@@ -53,31 +54,37 @@ pub struct LogicalLinkControl {
     pub control_field: u16,
 }
 
+#[derive(Clone, Copy)]
 #[repr(C, packed)]
 pub struct MacAddr {
     pub mac: [u8; 6],
 }
 
 #[repr(C, packed)]
-pub struct IBSSWifiPacketFrame<const DATA_SIZE: usize> {
+pub struct IBSSWifiPacketFrame<T> {
     pub frame_control: FrameControl,
+    /// Set this to zeroes, this is added automatically at the physical layer
     pub duration: u16,
-    pub destination_address: MacAddr,      // For DS(0,0) Destination
-    pub source_address: MacAddr,           // For DS(0,0) Source
-    pub bssid: MacAddr,                    // For DS(0,0) BSSID
-    pub sequence_control: SequenceControl, //Set to zero, this apparently is handled at the hardware/driver level so there's no point on setting it other than padding
+    /// Set this to broadcast(all bytes 0xff), this is the only way I know for it to not expect an ACK atm,
+    /// otherwise the card will enter a death loop sending the same packet
+    pub destination_address: MacAddr, // For DS(0,0) Destination
+    pub source_address: MacAddr, // For DS(0,0) Source
+    pub bssid: MacAddr,          // For DS(0,0) BSSID
+    ///Set to zero, this apparently is handled at the hardware/driver level so there's no point on setting it other than padding
+    pub sequence_control: SequenceControl,
     pub logical_link_control: LogicalLinkControl,
-    //pub addr_4: MacAddr, // For DS(0,0) not used
-    pub data: [u8; DATA_SIZE],
-    // pub crc: u32, //This is added automagically by the hardware/driver, no idea which one.
+    pub data: T,
 }
 
+#[derive(Clone, Copy)]
 #[repr(C, packed)]
 pub struct GenericWifiPacketFrameHeader {
     pub frame_control: FrameControl,
     pub duration: u16,
-    pub address_1: MacAddr,                
-    pub address_2: MacAddr,                
-    pub address_3: MacAddr,               
-    pub sequence_control: SequenceControl, 
+    pub address_1: MacAddr,
+    pub address_2: MacAddr,
+    pub address_3: MacAddr,
+    pub sequence_control: SequenceControl,
+    /// This is not a generic field but I added it to validate the frame type before parsing frames on the receiving end
+    pub logical_link_control: LogicalLinkControl,
 }

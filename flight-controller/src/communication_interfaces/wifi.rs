@@ -1,89 +1,83 @@
 use esp_idf_svc::sys::{
-    esp_wifi_init, esp_wifi_set_channel, esp_wifi_set_mode, esp_wifi_set_promiscuous,
+    esp_wifi_80211_tx, esp_wifi_init, esp_wifi_internal_tx, esp_wifi_set_channel,
+    esp_wifi_set_max_tx_power, esp_wifi_set_mode, esp_wifi_set_promiscuous,
     esp_wifi_set_promiscuous_filter, esp_wifi_set_promiscuous_rx_cb, esp_wifi_set_storage,
     esp_wifi_start, g_wifi_default_wpa_crypto_funcs, g_wifi_feature_caps, g_wifi_osi_funcs,
-    nvs_flash_init, wifi_init_config_t, wifi_mode_t_WIFI_MODE_NULL, wifi_osi_funcs_t,
-    wifi_promiscuous_filter_t, wifi_promiscuous_pkt_t, wifi_promiscuous_pkt_type_t,
-    wifi_promiscuous_pkt_type_t_WIFI_PKT_CTRL, wifi_promiscuous_pkt_type_t_WIFI_PKT_DATA,
-    wifi_promiscuous_pkt_type_t_WIFI_PKT_MGMT, wifi_second_chan_t_WIFI_SECOND_CHAN_NONE,
-    wifi_storage_t_WIFI_STORAGE_RAM, CONFIG_ESP_WIFI_DYNAMIC_RX_BUFFER_NUM,
-    CONFIG_ESP_WIFI_ESPNOW_MAX_ENCRYPT_NUM, CONFIG_ESP_WIFI_STATIC_RX_BUFFER_NUM,
-    CONFIG_ESP_WIFI_TX_BUFFER_TYPE, WIFI_AMPDU_RX_ENABLED, WIFI_AMPDU_TX_ENABLED,
-    WIFI_AMSDU_TX_ENABLED, WIFI_CACHE_TX_BUFFER_NUM, WIFI_CSI_ENABLED, WIFI_DEFAULT_RX_BA_WIN,
-    WIFI_DYNAMIC_TX_BUFFER_NUM, WIFI_INIT_CONFIG_MAGIC, WIFI_MGMT_SBUF_NUM,
-    WIFI_NANO_FORMAT_ENABLED, WIFI_NVS_ENABLED, WIFI_PROMIS_FILTER_MASK_DATA,
-    WIFI_PROMIS_FILTER_MASK_MGMT, WIFI_SOFTAP_BEACON_MAX_LEN, WIFI_STATIC_TX_BUFFER_NUM,
-    WIFI_STA_DISCONNECTED_PM_ENABLED, WIFI_TASK_CORE_ID,
+    nvs_flash_init, wifi_init_config_t, wifi_interface_t_WIFI_IF_NAN, wifi_mode_t_WIFI_MODE_NULL,
+    wifi_osi_funcs_t, wifi_pkt_rx_ctrl_t, wifi_promiscuous_filter_t, wifi_promiscuous_pkt_t,
+    wifi_promiscuous_pkt_type_t, wifi_promiscuous_pkt_type_t_WIFI_PKT_CTRL,
+    wifi_promiscuous_pkt_type_t_WIFI_PKT_DATA, wifi_promiscuous_pkt_type_t_WIFI_PKT_MGMT,
+    wifi_second_chan_t_WIFI_SECOND_CHAN_NONE, wifi_storage_t_WIFI_STORAGE_RAM,
+    CONFIG_ESP_WIFI_DYNAMIC_RX_BUFFER_NUM, CONFIG_ESP_WIFI_ESPNOW_MAX_ENCRYPT_NUM,
+    CONFIG_ESP_WIFI_STATIC_RX_BUFFER_NUM, CONFIG_ESP_WIFI_TX_BUFFER_TYPE, WIFI_AMPDU_RX_ENABLED,
+    WIFI_AMPDU_TX_ENABLED, WIFI_AMSDU_TX_ENABLED, WIFI_CACHE_TX_BUFFER_NUM, WIFI_CSI_ENABLED,
+    WIFI_DEFAULT_RX_BA_WIN, WIFI_DYNAMIC_TX_BUFFER_NUM, WIFI_INIT_CONFIG_MAGIC, WIFI_MGMT_SBUF_NUM,
+    WIFI_NANO_FORMAT_ENABLED, WIFI_NVS_ENABLED, WIFI_PROMIS_FILTER_MASK_ALL,
+    WIFI_PROMIS_FILTER_MASK_DATA, WIFI_PROMIS_FILTER_MASK_MGMT, WIFI_SOFTAP_BEACON_MAX_LEN,
+    WIFI_STATIC_TX_BUFFER_NUM, WIFI_STA_DISCONNECTED_PM_ENABLED, WIFI_TASK_CORE_ID,
 };
 use libwifi::{frame::Beacon, Frame};
-use std::ffi::c_void;
+use std::{ffi::c_void, mem};
+use wifi_protocol::{
+    ieee80211_frames::{GenericWifiPacketFrameHeader, IBSSWifiPacketFrame},
+    payloads::{CustomSAPs, DroneMovementsFramePayload},
+};
 
-#[repr(C, packed)]
-struct MacAddr {
-    mac: [u8; 6],
-}
-#[repr(C, packed)]
-struct WifiPacketPayload {
-    fctl: u16,
-    duration: u16,
-    destination_address: MacAddr,
-    source_address: MacAddr,
-    bssid: MacAddr,
-    seqctl: u16,
-    addr_4: MacAddr,
-    payload: &'static [u8],
+const PAIRING_BSSID_ADDRESS: [u8; 6] = [0x50, 0xba, 0x61, 0x2a, 0x4a, 0x5e];
+const TRANSMITTER_ADDRESS: [u8; 6] = [0xf2, 0xda, 0xd7, 0x60, 0x7e, 0xa9];
+
+//Had to construct my own struct as I couldn't work with the __IncompleteArrayField<> in wifi_promiscuous_pkt_t
+// #[derive(Debug, Default)]
+#[repr(C)]
+pub struct WifiPromiscousPacket {
+    pub rx_ctrl: wifi_pkt_rx_ctrl_t,
+    pub payload: GenericWifiPacketFrameHeader,
 }
 
 pub struct WifiSniffer;
 
 impl WifiSniffer {
-    unsafe extern "C" fn sniffer(buffer: *mut c_void, packet_type: wifi_promiscuous_pkt_type_t) {
+    unsafe extern "C" fn sniffer(buffer: *mut c_void, _packet_type: wifi_promiscuous_pkt_type_t) {
         // if packet_type == wifi_promiscuous_pkt_type_t_WIFI_PKT_DATA {
-        let packet_pointer: *mut wifi_promiscuous_pkt_t = buffer as *mut wifi_promiscuous_pkt_t;
-        let packet = packet_pointer.read();
-        let length = packet.rx_ctrl.sig_len();
+        let packet_pointer = buffer as *const WifiPromiscousPacket;
+        let esp_packet = packet_pointer.read();
+        let wifi_frame_length = esp_packet.rx_ctrl.sig_len();
 
-        let data = core::slice::from_raw_parts_mut(
-            &packet.payload as *const _ as *mut u8,
-            length as usize,
-        );
+        let data_ptr = buffer as *const u8;
+        let rx_ctrl_length = mem::size_of::<wifi_pkt_rx_ctrl_t>();
+        let total_length = rx_ctrl_length + wifi_frame_length as usize;
+        let total_struct_data = core::slice::from_raw_parts(data_ptr, total_length);
+        let wifi_frame_data = total_struct_data.split_at(rx_ctrl_length).1;
 
-        // let address_1 = (&data[10] as *const _ as *const MacAddr).read();
-        let payload_pointer = &packet.payload as *const _ as *const WifiPacketPayload;
-        let payload = payload_pointer.read();
-        let duration = payload.bssid;
-        // if data[4] == 0x1c {0
-        log::info!("Got package {:02X?} \n\n\n\n", duration.mac);
-        // }
-        // }
-        // log::info!(
-        //     "Got package {:02X?} \n\n\n\n",
-        //     payload.transmitter_address.mac
-        // );
-        // let wifi_packet_payload_pointer = &packet.payload as *const _ as *const [u8];
-        // packet
-        // let wifi_packet_payload = wifi_packet_payload_pointer.read();
-        // wifi_hdr
+        let wifi_frame = esp_packet.payload;
+        let bssid = wifi_frame.address_3;
+        let transmitter_addr = wifi_frame.address_2;
 
-        // match libwifi::parse_frame(data) {
-        //     Ok(frame) => {
-        //         match frame {
-        //             Frame::Data(beacon) => {
-        //                 log::info!("Got Data: {:?}", beacon);
-        //             }
-        //             default =>{
-        //                 log::info!("Got frame: {:?} \n\n\n", default);
-        //             }
-        //         }
-        //     }
-        //     Err(err) => {
-        //         // println!("Error during parsing :\n{}", err);
-        //     }
-        // };
+        if bssid.mac == PAIRING_BSSID_ADDRESS && transmitter_addr.mac == TRANSMITTER_ADDRESS {
+            let llc = wifi_frame.logical_link_control;
+            let dsap = llc.dsap();
+            match CustomSAPs::try_from(dsap).unwrap() {
+                CustomSAPs::ControllerFrame => {
+                    let parsed_packet: IBSSWifiPacketFrame<DroneMovementsFramePayload> =
+                        mem::zeroed();
 
-        // let payload = wifi_packet_payload.addr_4;
+                    let parsed_packet_size =
+                        mem::size_of::<IBSSWifiPacketFrame<DroneMovementsFramePayload>>();
+                    let parsed_packet_buffer = core::slice::from_raw_parts_mut(
+                        &parsed_packet as *const _ as *mut u8,
+                        parsed_packet_size,
+                    );
 
-        // log::info!("Packet {} -- {:?}", length, payload.mac);
+                    parsed_packet_buffer.clone_from_slice(&wifi_frame_data[..parsed_packet_size]);
+
+                    let frame_control = parsed_packet.data;
+                    log::info!("Packet {:02x?}", frame_control);
+                }
+                _ => (),
+            }
+        }
+
+        // log::info!("Pointer {:02x?}", bssid);
     }
 
     unsafe fn get_wifi_default_config() -> wifi_init_config_t {
@@ -116,7 +110,8 @@ impl WifiSniffer {
     pub fn init_promiscous(channel: u8) {
         unsafe {
             let filter: wifi_promiscuous_filter_t = wifi_promiscuous_filter_t {
-                filter_mask: WIFI_PROMIS_FILTER_MASK_MGMT | WIFI_PROMIS_FILTER_MASK_DATA,
+                // filter_mask: WIFI_PROMIS_FILTER_MASK_MGMT | WIFI_PROMIS_FILTER_MASK_DATA,
+                filter_mask: WIFI_PROMIS_FILTER_MASK_DATA,
             };
             let filter_pointer = &filter as *const _ as *const wifi_promiscuous_filter_t;
 
@@ -129,7 +124,10 @@ impl WifiSniffer {
             esp_wifi_set_promiscuous(true);
             esp_wifi_set_promiscuous_filter(filter_pointer);
             esp_wifi_set_promiscuous_rx_cb(Option::Some(Self::sniffer));
+            // esp_wifi_set_max_tx_power(80); //Set to 20dbm transmit power
             esp_wifi_set_channel(channel, wifi_second_chan_t_WIFI_SECOND_CHAN_NONE);
+            // esp_wifi_80211_tx(wifi_interface_t_WIFI_IF_NAN, buffer, len, en_sys_seq);
+            // esp_wifi_internal_tx(wifi_if, buffer, len)
         }
     }
 }

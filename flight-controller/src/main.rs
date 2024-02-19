@@ -6,11 +6,11 @@ mod control;
 mod output;
 mod util;
 
-use std::ffi::c_void;
+use std::ffi::{c_void, CString};
 
 use esp_idf_svc::hal::delay::FreeRtos;
 use esp_idf_svc::hal::peripherals::Peripherals;
-use esp_idf_svc::sys::{esp_pm_config_t, esp_pm_configure};
+use esp_idf_svc::sys::{esp_pm_config_t, esp_pm_configure, vTaskDelete, xTaskCreatePinnedToCore};
 
 use crate::communication_interfaces::wifi::WifiSniffer;
 use crate::control::control_loops::init_flight_stabilizer_thread;
@@ -18,12 +18,12 @@ use crate::control::control_loops::init_flight_stabilizer_thread;
 use crate::communication_interfaces::i2c::*;
 use crate::output::motors_state_manager::MotorsStateManager;
 
-fn main() {
-    esp_idf_svc::sys::link_patches();
-    esp_idf_svc::log::EspLogger::initialize_default();
+unsafe extern "C" fn comms_thread_task(params: *mut core::ffi::c_void) {
+    WifiSniffer::init_promiscous(13);
+    vTaskDelete(std::ptr::null_mut());
+}
 
-    log::info!("Running");
-
+unsafe extern "C" fn flight_control_thread_task(params: *mut core::ffi::c_void) {
     let mut peripherals: Peripherals = Peripherals::take().unwrap();
 
     let mut motors_states = MotorsStateManager::new();
@@ -32,6 +32,13 @@ fn main() {
     let i2c_driver = get_i2c_driver(&mut peripherals);
 
     init_flight_stabilizer_thread(i2c_driver, motors_states);
+    vTaskDelete(std::ptr::null_mut());
+}
+fn main() {
+    esp_idf_svc::sys::link_patches();
+    esp_idf_svc::log::EspLogger::initialize_default();
+
+    log::info!("Running");
 
     unsafe {
         let config = esp_pm_config_t {
@@ -44,10 +51,28 @@ fn main() {
         log::info!("Set core frequency");
     }
 
-    WifiSniffer::init_promiscous(13);
+    unsafe {
+        xTaskCreatePinnedToCore(
+            Some(comms_thread_task),
+            CString::new("Comms Task").unwrap().as_ptr(),
+            4096,
+            std::ptr::null_mut(),
+            10,
+            std::ptr::null_mut(),
+            0,
+        )
+    };
 
-    loop {
-        FreeRtos::delay_ms(1000);
-    }
+    unsafe {
+        xTaskCreatePinnedToCore(
+            Some(flight_control_thread_task),
+            CString::new("Flight Task").unwrap().as_ptr(),
+            4096,
+            std::ptr::null_mut(),
+            10,
+            std::ptr::null_mut(),
+            1,
+        )
+    };
     // wifi_driver.set_configuration(&Configuration::Client(ClientConfiguration{}))
 }

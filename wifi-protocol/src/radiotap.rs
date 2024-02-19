@@ -1,6 +1,4 @@
-use super::ieee80211_frame::IBSSWifiPacketFrame;
-
-// Bits start at 0
+// Beware, Bits in documentation start at 0
 bitflags::bitflags! {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
     pub struct RadiotapFlags: u32 {
@@ -43,7 +41,7 @@ pub struct RadiotapHeader {
 }
 
 #[repr(C, packed)]
-pub struct RadiotapPacket<const DATA_SIZE: usize> {
+pub struct RadiotapPacket<T> {
     pub header: RadiotapHeader,
-    pub data: IBSSWifiPacketFrame<DATA_SIZE>,
+    pub data: T,
 }
