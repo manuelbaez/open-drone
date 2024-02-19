@@ -3,14 +3,12 @@
 extern crate rawsock;
 use std::{mem, thread::sleep, time::Duration};
 
-use pcap::{Active, Capture, Device};
+use pcap::Device;
 use wifi_protocol::{
     builders::{build_ibss_broadcast_data_frame, build_radiotap},
-    ieee80211_frames::{
-        FrameControl, IBSSWifiPacketFrame, LogicalLinkControl, MacAddr, SequenceControl,
-    },
+    ieee80211_frames::{IBSSWifiPacketFrame, MacAddr},
     payloads::{CustomSAPs, DroneMovementsFramePayload},
-    radiotap::{DataRate, RadiotapFlags, RadiotapHeader, RadiotapHeaderFields, RadiotapPacket},
+    radiotap::{DataRate, RadiotapPacket},
 };
 
 use crate::input::ControlInputMapper;
@@ -29,11 +27,14 @@ fn main() {
     let control_mapper: ControlInputMapper = ControlInputMapper::new("/dev/input/event23");
     control_mapper.start_event_handler_thread();
     loop {
-        // build_and_send_packet(&mut device);
         let current_input = control_mapper.get_current_input();
         println!(
-            "Throttle: {} - Pitch: {}- Roll: {} Kill: {}",
-            current_input.throttle, current_input.pitch, current_input.roll, current_input.kill_motors
+            "Throttle: {} - Pitch: {} - Roll: {} - Yaw: {} - Kill: {}",
+            current_input.throttle,
+            current_input.pitch,
+            current_input.roll,
+            current_input.yaw,
+            current_input.kill_motors
         );
         let packet_payload = DroneMovementsFramePayload {
             throttle: current_input.throttle,
@@ -61,6 +62,6 @@ fn main() {
             unsafe { core::slice::from_raw_parts(radiotap_packet_pointer, radiotap_packet_size) };
         device.sendpacket(radiotap_data).unwrap();
 
-        sleep(Duration::from_millis(500));
+        sleep(Duration::from_millis(5));
     }
 }

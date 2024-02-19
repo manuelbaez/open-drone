@@ -4,6 +4,7 @@ use std::{
     io::Read,
     mem,
     ops::Deref,
+    result,
     sync::{Arc, Mutex},
 };
 
@@ -11,12 +12,15 @@ use self::controller::{AnalogInputCodes, ButtonPressCodes, EventTypes, InputEven
 
 pub mod controller;
 
+const CONTROLLER_THROTTLE_MAX_VALUE: u32 = 1024;
+const STICKS_DEAD_ZONES: i32 = 1800;
+
 #[derive(Clone)]
 pub struct DroneControllerInput {
-    pub roll: i32,
-    pub pitch: i32,
-    pub yaw: i32,
-    pub throttle: u16,
+    pub roll: i16,
+    pub pitch: i16,
+    pub yaw: i16,
+    pub throttle: u8,
     pub kill_motors: bool,
     pub start_motors: bool,
 }
@@ -56,25 +60,36 @@ impl ControlInputMapper {
                     self.handle_analog_input(event_code.unwrap(), event.value)
                 }
             }
-            _default => ()
+            _default => (),
         }
     }
 
+    fn filter_dead_zones(value: i16) -> i16 {
+        if (value as i32).abs() > STICKS_DEAD_ZONES {
+            return value;
+        }
+        return 0;
+    }
     fn handle_analog_input(&mut self, event_code: AnalogInputCodes, value: i32) {
         match event_code {
             AnalogInputCodes::LT => {
                 let mut lock = self.drone_controls.lock().unwrap();
-                lock.throttle = value as u16;
+                lock.throttle = ((value as u32 * 256) / CONTROLLER_THROTTLE_MAX_VALUE) as u8;
                 drop(lock);
             }
             AnalogInputCodes::RightX => {
                 let mut lock = self.drone_controls.lock().unwrap();
-                lock.roll = value;
+                lock.roll = Self::filter_dead_zones(value as i16);
                 drop(lock);
             }
             AnalogInputCodes::RightY => {
                 let mut lock = self.drone_controls.lock().unwrap();
-                lock.pitch = value;
+                lock.pitch = Self::filter_dead_zones(value as i16);
+                drop(lock);
+            }
+            AnalogInputCodes::LeftX => {
+                let mut lock = self.drone_controls.lock().unwrap();
+                lock.yaw = Self::filter_dead_zones(value as i16);
                 drop(lock);
             }
             _default => {}

@@ -20,10 +20,10 @@ impl TryFrom<u8> for CustomSAPs {
 #[derive(Debug)]
 #[repr(C, packed)]
 pub struct DroneMovementsFramePayload {
-    pub roll: i32,
-    pub pitch: i32,
-    pub yaw: i32,
-    pub throttle: u16,
+    pub roll: i16,
+    pub pitch: i16,
+    pub yaw: i16,
+    pub throttle: u8,
     pub kill_motors: bool,
     pub start: bool,
 }
