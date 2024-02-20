@@ -23,7 +23,11 @@ use esp_idf_svc::{
 use std::{
     ffi::c_void,
     mem,
-    sync::{Arc, RwLock},
+    ops::Deref,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, Mutex, RwLock,
+    },
 };
 use wifi_protocol::{
     ieee80211_frames::{GenericWifiPacketFrameHeader, IBSSWifiPacketFrame},
@@ -50,7 +54,9 @@ pub static CONTROLLER_INPUT_DATA: RwLock<ControllerInput> = RwLock::new(Controll
     throttle: 0,
     kill_motors: false,
     start: false,
+    calibrate: false,
 });
+pub static DATA_READY_LOCK: AtomicBool = AtomicBool::new(false);
 
 pub struct WifiController;
 
@@ -64,7 +70,8 @@ impl WifiController {
         input_data_lock.pitch = input.pitch;
         input_data_lock.yaw = input.yaw;
         input_data_lock.throttle = input.throttle;
-
+        input_data_lock.calibrate = input.calibrate;
+        DATA_READY_LOCK.store(true, Ordering::Release);
         drop(input_data_lock);
     }
 
@@ -176,16 +183,21 @@ impl WifiController {
         }
 
         loop {
-            let mut value = controller_input.write().unwrap();
-            let temporary = CONTROLLER_INPUT_DATA.read().unwrap();
-            value.kill_motors = temporary.kill_motors;
-            value.start = temporary.start;
-            value.roll = temporary.roll;
-            value.pitch = temporary.pitch;
-            value.yaw = temporary.yaw;
-            value.throttle = temporary.throttle;
-            drop(value);
-            drop(temporary);
+            let ready = DATA_READY_LOCK.load(Ordering::Acquire);
+            if ready {
+                let mut value = controller_input.write().unwrap();
+                let temporary = CONTROLLER_INPUT_DATA.read().unwrap();
+                value.kill_motors = temporary.kill_motors;
+                value.start = temporary.start;
+                value.calibrate = temporary.calibrate;
+                value.roll = temporary.roll;
+                value.pitch = temporary.pitch;
+                value.yaw = temporary.yaw;
+                value.throttle = temporary.throttle;
+                drop(value);
+                drop(temporary);
+            }
+
             FreeRtos::delay_ms(1);
         }
     }

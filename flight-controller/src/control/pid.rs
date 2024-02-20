@@ -37,7 +37,12 @@ impl PID {
         let derivative_output = change_rate * self.derivative_multiplier;
 
         self.previous_error = error;
-        
+
         proportional_output + integral_output + derivative_output
+    }
+
+    pub fn reset(&mut self) {
+        self.accumulated_error = 0.0;
+        self.previous_error = 0.0;
     }
 }

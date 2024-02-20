@@ -22,6 +22,7 @@ pub struct DroneControllerInput {
     pub throttle: u8,
     pub kill_motors: bool,
     pub start_motors: bool,
+    pub calibrate: bool,
 }
 
 #[derive(Clone)]
@@ -40,6 +41,7 @@ impl ControlInputMapper {
                 throttle: 0,
                 start_motors: false,
                 kill_motors: false,
+                calibrate: false,
             })),
             device_path: Arc::new(device_path),
         }
@@ -105,6 +107,11 @@ impl ControlInputMapper {
             ButtonPressCodes::A => {
                 let mut lock = self.drone_controls.lock().unwrap();
                 lock.kill_motors = value != 0;
+                drop(lock);
+            }
+            ButtonPressCodes::B => {
+                let mut lock = self.drone_controls.lock().unwrap();
+                lock.calibrate = value != 0;
                 drop(lock);
             }
             _default => (),

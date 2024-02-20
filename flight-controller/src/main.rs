@@ -59,6 +59,7 @@ fn main() {
         throttle: 0,
         kill_motors: false,
         start: false,
+        calibrate:false,
     };
     let control_input_values = Arc::new(RwLock::new(controller_input_shared));
 

@@ -109,6 +109,12 @@ impl RotationRateFlightController {
             capped_throttle[3],
         ]
     }
+
+    pub fn reset(&mut self) {
+        self.pitch_pid.reset();
+        self.roll_pid.reset();
+        self.yaw_pid.reset();
+    }
 }
 
 pub struct AngleModeControllerInput {

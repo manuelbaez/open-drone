@@ -43,7 +43,7 @@ impl MotorsStateManager {
         self.controllers.push(motor_4_controller);
     }
 
-    pub fn initialize_esc(&mut self) {
+    pub fn calibrate_esc(&mut self) {
         self.controllers[0].calibrate_esc();
     }
 

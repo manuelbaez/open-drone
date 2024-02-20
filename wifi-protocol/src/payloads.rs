@@ -26,4 +26,5 @@ pub struct DroneMovementsFramePayload {
     pub throttle: u8,
     pub kill_motors: bool,
     pub start: bool,
+    pub calibrate: bool,
 }

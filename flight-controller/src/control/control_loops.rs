@@ -30,7 +30,7 @@ const US_IN_SECOND: f32 = 1_000_000.0_f32;
 fn stabilizer_loop(
     imu: &mut MPU6050Sensor<I2cDriver<'static>>,
     motors_manager: &mut MotorsStateManager,
-    motors_power: Arc<RwLock<[f32; 4]>>,
+    debug_values: Arc<RwLock<[f32; 5]>>,
     control_input_values: Arc<RwLock<ControllerInput>>,
 ) {
     let system_time = SystemTime::now();
@@ -47,25 +47,31 @@ fn stabilizer_loop(
     let mut angle_flight_controller =
         AngleModeFlightController::new(MAX_ROTATION_RATE, GYRO_DRIFT_DEG, ACCEL_UNCERTAINTY_DEG);
 
+    let mut drone_on = false;
+
     loop {
         let input_values = control_input_values.read().unwrap();
+
         if input_values.start {
-            motors_manager.initialize_esc();
-            drop(input_values);
-            break;
+            drone_on = true;
         }
-        drop(input_values);
-
-        FreeRtos::delay_ms(10);
-    }
-
-    loop {
-        let input_values = control_input_values.read().unwrap();
         if input_values.kill_motors {
-            motors_manager.set_motor_power([0.0, 0.0, 0.0, 0.0]);
-            break;
+            drone_on = false;
         }
-        let throttle: f32 = (input_values.throttle as f32 / u8::max_value() as f32) * 100.0_f32;
+
+        if input_values.calibrate && !drone_on {
+            motors_manager.calibrate_esc();
+        }
+
+        if !drone_on {
+            motors_manager.set_motor_power([0.0, 0.0, 0.0, 0.0]);
+            rotation_mode_flight_controller.reset();
+            drop(input_values);
+            FreeRtos::delay_ms(5);
+            continue;
+        }
+
+        let throttle: f32 = (input_values.throttle as f32 / 255.0_f32) * 80.0_f32;
         let desired_rotation = RotationVector3D {
             pitch: (input_values.pitch as f32 / i32::max_value() as f32) * 100.0_f32,
             roll: (input_values.roll as f32 / i32::max_value() as f32) * 100.0_f32,
@@ -105,12 +111,13 @@ fn stabilizer_loop(
 
         motors_manager.set_motor_power(motor_output);
 
-        let mut power = motors_power.write().unwrap();
-        power[0] = (current_time_us - previous_time_us) as f32;
+        let mut debug_values_lock = debug_values.write().unwrap();
+        debug_values_lock[0] = (current_time_us - previous_time_us) as f32;
         previous_time_us = current_time_us;
-        power[1] = motor_output[1];
-        power[2] = motor_output[2];
-        power[3] = motor_output[3];
+        debug_values_lock[1] = motor_output[0];
+        debug_values_lock[2] = motor_output[1];
+        debug_values_lock[3] = motor_output[2];
+        debug_values_lock[4] = motor_output[3];
     }
 }
 
@@ -135,22 +142,22 @@ pub fn start_flight_stabilizer(control_input_value: Arc<RwLock<ControllerInput>>
 
     let mut imu = MPU6050Sensor::new(i2c_driver, gyro_calibration, acceleromenter_calibration);
 
-    let motors_power = Arc::new(RwLock::new([0.0_f32, 0.0_f32, 0.0_f32, 0.0_f32]));
+    let debug_values = Arc::new(RwLock::new([0.0_f32, 0.0_f32, 0.0_f32, 0.0_f32, 0.0_f32]));
     // Print values thread, for debugging purposes.
     {
         let control_input_arc = control_input_value.clone();
-        let motor_power = motors_power.clone();
+        let debug_values = debug_values.clone();
 
         let _ = std::thread::Builder::new()
             .stack_size(4096)
             .spawn(move || loop {
                 // let control_input_values = control_input_arc.read().unwrap();
                 let values = control_input_arc.read().unwrap();
-                let power = motor_power.read().unwrap();
-                print!("Curent POWER {:?}\n", power);
+                let debug_values_lock = debug_values.read().unwrap();
+                print!("Debug Values {:?}\n", debug_values_lock);
                 print!("Curent values{:?}\n", values);
                 drop(values);
-                drop(power);
+                drop(debug_values_lock);
                 FreeRtos::delay_ms(500);
             });
     }
@@ -158,13 +165,7 @@ pub fn start_flight_stabilizer(control_input_value: Arc<RwLock<ControllerInput>>
     stabilizer_loop(
         &mut imu,
         &mut motors_manager,
-        motors_power,
+        debug_values,
         control_input_value,
     );
-    // {
-    //     let motors_power = motors_power.clone();
-    //     let _thread = std::thread::Builder::new()
-    //         .stack_size(4096)
-    //         .spawn(move || stabilizer_loop(&mut imu, &mut motors_manager, motors_power));
-    // }
 }

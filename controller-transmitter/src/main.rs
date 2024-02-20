@@ -29,13 +29,14 @@ fn main() {
     loop {
         let current_input = control_mapper.get_current_input();
         println!(
-            "Throttle: {} - Pitch: {} - Roll: {} - Yaw: {} - Kill: {} - Start: {}",
+            "Throttle: {} - Pitch: {} - Roll: {} - Yaw: {} - Kill: {} - Start: {} - Calibrate : {}",
             current_input.throttle,
             current_input.pitch,
             current_input.roll,
             current_input.yaw,
             current_input.kill_motors,
-            current_input.start_motors
+            current_input.start_motors,
+            current_input.calibrate,
         );
         let packet_payload = DroneMovementsFramePayload {
             throttle: current_input.throttle,
@@ -44,6 +45,7 @@ fn main() {
             yaw: current_input.yaw,
             start: current_input.start_motors,
             kill_motors: current_input.kill_motors,
+            calibrate: current_input.calibrate,
         };
 
         let wifi_frame = build_ibss_broadcast_data_frame(
