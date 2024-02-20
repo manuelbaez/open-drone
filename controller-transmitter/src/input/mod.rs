@@ -4,7 +4,6 @@ use std::{
     io::Read,
     mem,
     ops::Deref,
-    result,
     sync::{Arc, Mutex},
 };
 

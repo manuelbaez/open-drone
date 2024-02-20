@@ -29,12 +29,13 @@ fn main() {
     loop {
         let current_input = control_mapper.get_current_input();
         println!(
-            "Throttle: {} - Pitch: {} - Roll: {} - Yaw: {} - Kill: {}",
+            "Throttle: {} - Pitch: {} - Roll: {} - Yaw: {} - Kill: {} - Start: {}",
             current_input.throttle,
             current_input.pitch,
             current_input.roll,
             current_input.yaw,
-            current_input.kill_motors
+            current_input.kill_motors,
+            current_input.start_motors
         );
         let packet_payload = DroneMovementsFramePayload {
             throttle: current_input.throttle,

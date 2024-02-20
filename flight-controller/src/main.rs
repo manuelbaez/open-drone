@@ -7,33 +7,34 @@ mod output;
 mod util;
 
 use std::ffi::{c_void, CString};
+use std::mem;
+use std::sync::{Arc, RwLock};
 
 use esp_idf_svc::hal::delay::FreeRtos;
-use esp_idf_svc::hal::peripherals::Peripherals;
 use esp_idf_svc::sys::{esp_pm_config_t, esp_pm_configure, vTaskDelete, xTaskCreatePinnedToCore};
 
-use crate::communication_interfaces::wifi::WifiSniffer;
-use crate::control::control_loops::init_flight_stabilizer_thread;
+use crate::communication_interfaces::wifi::{
+    ControllerInput, WifiController, CONTROLLER_INPUT_DATA,
+};
+use crate::control::control_loops::start_flight_stabilizer;
 
 use crate::communication_interfaces::i2c::*;
-use crate::output::motors_state_manager::MotorsStateManager;
 
 unsafe extern "C" fn comms_thread_task(params: *mut core::ffi::c_void) {
-    WifiSniffer::init_promiscous(13);
+    let controller_input_ptr = params as *const _ as *const Arc<RwLock<ControllerInput>>;
+    let controller_input = controller_input_ptr.read();
+    // loop {
+    //     let mut input_data = input_data_lock.write().unwrap();
+    //     // log::info!("Kill {}", input_data.kill_motors);
+    //     input_data.kill_motors = true;
+    //     drop(input_data);
+    //     FreeRtos::delay_ms(500);
+    // }
+
+    WifiController::init_monitor(13, controller_input.clone());
     vTaskDelete(std::ptr::null_mut());
 }
 
-unsafe extern "C" fn flight_control_thread_task(params: *mut core::ffi::c_void) {
-    let mut peripherals: Peripherals = Peripherals::take().unwrap();
-
-    let mut motors_states = MotorsStateManager::new();
-    motors_states.initialize_motor_controllers(&mut peripherals);
-
-    let i2c_driver = get_i2c_driver(&mut peripherals);
-
-    init_flight_stabilizer_thread(i2c_driver, motors_states);
-    vTaskDelete(std::ptr::null_mut());
-}
 fn main() {
     esp_idf_svc::sys::link_patches();
     esp_idf_svc::log::EspLogger::initialize_default();
@@ -51,28 +52,45 @@ fn main() {
         log::info!("Set core frequency");
     }
 
+    let controller_input_shared = ControllerInput {
+        yaw: 0,
+        pitch: 0,
+        roll: 0,
+        throttle: 0,
+        kill_motors: false,
+        start: false,
+    };
+    let control_input_values = Arc::new(RwLock::new(controller_input_shared));
+
     unsafe {
         xTaskCreatePinnedToCore(
             Some(comms_thread_task),
             CString::new("Comms Task").unwrap().as_ptr(),
             4096,
-            std::ptr::null_mut(),
-            10,
-            std::ptr::null_mut(),
-            0,
-        )
-    };
-
-    unsafe {
-        xTaskCreatePinnedToCore(
-            Some(flight_control_thread_task),
-            CString::new("Flight Task").unwrap().as_ptr(),
-            4096,
-            std::ptr::null_mut(),
+            &control_input_values.clone() as *const _ as *mut c_void,
             10,
             std::ptr::null_mut(),
             1,
         )
     };
+
+    start_flight_stabilizer(control_input_values.clone());
+    // loop {
+    //     let data = control_input_values.read().unwrap();
+    //     println!("Data {}", data.start);
+    //     FreeRtos::delay_ms(1000);
+    // }
+
+    // unsafe {
+    //     xTaskCreatePinnedToCore(
+    //         Some(flight_control_thread_task),
+    //         CString::new("Flight Task").unwrap().as_ptr(),
+    //         4096,
+    //         std::ptr::null_mut(),
+    //         10,
+    //         std::ptr::null_mut(),
+    //         1,
+    //     )
+    // };
     // wifi_driver.set_configuration(&Configuration::Client(ClientConfiguration{}))
 }

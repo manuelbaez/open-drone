@@ -1,23 +1,30 @@
-use esp_idf_svc::sys::{
-    esp_wifi_80211_tx, esp_wifi_init, esp_wifi_internal_tx, esp_wifi_set_channel,
-    esp_wifi_set_max_tx_power, esp_wifi_set_mode, esp_wifi_set_promiscuous,
-    esp_wifi_set_promiscuous_filter, esp_wifi_set_promiscuous_rx_cb, esp_wifi_set_storage,
-    esp_wifi_start, g_wifi_default_wpa_crypto_funcs, g_wifi_feature_caps, g_wifi_osi_funcs,
-    nvs_flash_init, wifi_init_config_t, wifi_interface_t_WIFI_IF_NAN, wifi_mode_t_WIFI_MODE_NULL,
-    wifi_osi_funcs_t, wifi_pkt_rx_ctrl_t, wifi_promiscuous_filter_t, wifi_promiscuous_pkt_t,
-    wifi_promiscuous_pkt_type_t, wifi_promiscuous_pkt_type_t_WIFI_PKT_CTRL,
-    wifi_promiscuous_pkt_type_t_WIFI_PKT_DATA, wifi_promiscuous_pkt_type_t_WIFI_PKT_MGMT,
-    wifi_second_chan_t_WIFI_SECOND_CHAN_NONE, wifi_storage_t_WIFI_STORAGE_RAM,
-    CONFIG_ESP_WIFI_DYNAMIC_RX_BUFFER_NUM, CONFIG_ESP_WIFI_ESPNOW_MAX_ENCRYPT_NUM,
-    CONFIG_ESP_WIFI_STATIC_RX_BUFFER_NUM, CONFIG_ESP_WIFI_TX_BUFFER_TYPE, WIFI_AMPDU_RX_ENABLED,
-    WIFI_AMPDU_TX_ENABLED, WIFI_AMSDU_TX_ENABLED, WIFI_CACHE_TX_BUFFER_NUM, WIFI_CSI_ENABLED,
-    WIFI_DEFAULT_RX_BA_WIN, WIFI_DYNAMIC_TX_BUFFER_NUM, WIFI_INIT_CONFIG_MAGIC, WIFI_MGMT_SBUF_NUM,
-    WIFI_NANO_FORMAT_ENABLED, WIFI_NVS_ENABLED, WIFI_PROMIS_FILTER_MASK_ALL,
-    WIFI_PROMIS_FILTER_MASK_DATA, WIFI_PROMIS_FILTER_MASK_MGMT, WIFI_SOFTAP_BEACON_MAX_LEN,
-    WIFI_STATIC_TX_BUFFER_NUM, WIFI_STA_DISCONNECTED_PM_ENABLED, WIFI_TASK_CORE_ID,
+use esp_idf_svc::{
+    hal::delay::FreeRtos,
+    sys::{
+        esp_wifi_80211_tx, esp_wifi_init, esp_wifi_internal_tx, esp_wifi_set_channel,
+        esp_wifi_set_max_tx_power, esp_wifi_set_mode, esp_wifi_set_promiscuous,
+        esp_wifi_set_promiscuous_filter, esp_wifi_set_promiscuous_rx_cb, esp_wifi_set_storage,
+        esp_wifi_start, g_wifi_default_wpa_crypto_funcs, g_wifi_feature_caps, g_wifi_osi_funcs,
+        nvs_flash_init, wifi_init_config_t, wifi_interface_t_WIFI_IF_NAN,
+        wifi_mode_t_WIFI_MODE_NULL, wifi_osi_funcs_t, wifi_pkt_rx_ctrl_t,
+        wifi_promiscuous_filter_t, wifi_promiscuous_pkt_t, wifi_promiscuous_pkt_type_t,
+        wifi_promiscuous_pkt_type_t_WIFI_PKT_CTRL, wifi_promiscuous_pkt_type_t_WIFI_PKT_DATA,
+        wifi_promiscuous_pkt_type_t_WIFI_PKT_MGMT, wifi_second_chan_t_WIFI_SECOND_CHAN_NONE,
+        wifi_storage_t_WIFI_STORAGE_RAM, CONFIG_ESP_WIFI_DYNAMIC_RX_BUFFER_NUM,
+        CONFIG_ESP_WIFI_ESPNOW_MAX_ENCRYPT_NUM, CONFIG_ESP_WIFI_STATIC_RX_BUFFER_NUM,
+        CONFIG_ESP_WIFI_TX_BUFFER_TYPE, WIFI_AMPDU_RX_ENABLED, WIFI_AMPDU_TX_ENABLED,
+        WIFI_AMSDU_TX_ENABLED, WIFI_CACHE_TX_BUFFER_NUM, WIFI_CSI_ENABLED, WIFI_DEFAULT_RX_BA_WIN,
+        WIFI_DYNAMIC_TX_BUFFER_NUM, WIFI_INIT_CONFIG_MAGIC, WIFI_MGMT_SBUF_NUM,
+        WIFI_NANO_FORMAT_ENABLED, WIFI_NVS_ENABLED, WIFI_PROMIS_FILTER_MASK_ALL,
+        WIFI_PROMIS_FILTER_MASK_DATA, WIFI_PROMIS_FILTER_MASK_MGMT, WIFI_SOFTAP_BEACON_MAX_LEN,
+        WIFI_STATIC_TX_BUFFER_NUM, WIFI_STA_DISCONNECTED_PM_ENABLED, WIFI_TASK_CORE_ID,
+    },
 };
-use libwifi::{frame::Beacon, Frame};
-use std::{ffi::c_void, mem};
+use std::{
+    ffi::c_void,
+    mem,
+    sync::{Arc, RwLock},
+};
 use wifi_protocol::{
     ieee80211_frames::{GenericWifiPacketFrameHeader, IBSSWifiPacketFrame},
     payloads::{CustomSAPs, DroneMovementsFramePayload},
@@ -25,6 +32,8 @@ use wifi_protocol::{
 
 const PAIRING_BSSID_ADDRESS: [u8; 6] = [0x50, 0xba, 0x61, 0x2a, 0x4a, 0x5e];
 const TRANSMITTER_ADDRESS: [u8; 6] = [0xf2, 0xda, 0xd7, 0x60, 0x7e, 0xa9];
+
+pub type ControllerInput = DroneMovementsFramePayload;
 
 //Had to construct my own struct as I couldn't work with the __IncompleteArrayField<> in wifi_promiscuous_pkt_t
 // #[derive(Debug, Default)]
@@ -34,9 +43,31 @@ pub struct WifiPromiscousPacket {
     pub payload: GenericWifiPacketFrameHeader,
 }
 
-pub struct WifiSniffer;
+pub static CONTROLLER_INPUT_DATA: RwLock<ControllerInput> = RwLock::new(ControllerInput {
+    yaw: 0,
+    pitch: 0,
+    roll: 0,
+    throttle: 0,
+    kill_motors: false,
+    start: false,
+});
 
-impl WifiSniffer {
+pub struct WifiController;
+
+impl WifiController {
+    fn handle_controller_input(input: ControllerInput) {
+        let mut input_data_lock = CONTROLLER_INPUT_DATA.write().unwrap();
+
+        input_data_lock.kill_motors = input.kill_motors;
+        input_data_lock.start = input.start;
+        input_data_lock.roll = input.roll;
+        input_data_lock.pitch = input.pitch;
+        input_data_lock.yaw = input.yaw;
+        input_data_lock.throttle = input.throttle;
+
+        drop(input_data_lock);
+    }
+
     unsafe extern "C" fn sniffer(buffer: *mut c_void, _packet_type: wifi_promiscuous_pkt_type_t) {
         // if packet_type == wifi_promiscuous_pkt_type_t_WIFI_PKT_DATA {
         let packet_pointer = buffer as *const WifiPromiscousPacket;
@@ -70,14 +101,14 @@ impl WifiSniffer {
 
                     parsed_packet_buffer.clone_from_slice(&wifi_frame_data[..parsed_packet_size]);
 
-                    let frame_control = parsed_packet.data;
-                    log::info!("Packet {:02x?}", frame_control);
+                    let data = parsed_packet.data;
+                    Self::handle_controller_input(data);
+
+                    // log::info!("Packet {:02x?}", frame_control);
                 }
                 _ => (),
             }
         }
-
-        // log::info!("Pointer {:02x?}", bssid);
     }
 
     unsafe fn get_wifi_default_config() -> wifi_init_config_t {
@@ -107,7 +138,21 @@ impl WifiSniffer {
         }
     }
 
-    pub fn init_promiscous(channel: u8) {
+    pub fn init_monitor(channel: u8, controller_input: Arc<RwLock<ControllerInput>>) {
+        // loop {
+        //     let mut value = controller_input.write().unwrap();
+        //     value.kill_motors = true;
+        //     log::info!("Set true");
+        //     drop(value);
+        //     FreeRtos::delay_ms(1000);
+        //     let mut value = controller_input.write().unwrap();
+        //     value.kill_motors = false;
+        //     log::info!("Set false");
+        //     drop(value);
+        //     FreeRtos::delay_ms(1000);
+        // }
+
+        // CONTROLLER_INPUT_DATA = controller_input.read();
         unsafe {
             let filter: wifi_promiscuous_filter_t = wifi_promiscuous_filter_t {
                 // filter_mask: WIFI_PROMIS_FILTER_MASK_MGMT | WIFI_PROMIS_FILTER_MASK_DATA,
@@ -128,6 +173,20 @@ impl WifiSniffer {
             esp_wifi_set_channel(channel, wifi_second_chan_t_WIFI_SECOND_CHAN_NONE);
             // esp_wifi_80211_tx(wifi_interface_t_WIFI_IF_NAN, buffer, len, en_sys_seq);
             // esp_wifi_internal_tx(wifi_if, buffer, len)
+        }
+
+        loop {
+            let mut value = controller_input.write().unwrap();
+            let temporary = CONTROLLER_INPUT_DATA.read().unwrap();
+            value.kill_motors = temporary.kill_motors;
+            value.start = temporary.start;
+            value.roll = temporary.roll;
+            value.pitch = temporary.pitch;
+            value.yaw = temporary.yaw;
+            value.throttle = temporary.throttle;
+            drop(value);
+            drop(temporary);
+            FreeRtos::delay_ms(1);
         }
     }
 }
