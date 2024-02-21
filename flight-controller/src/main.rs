@@ -20,18 +20,10 @@ use crate::control::control_loops::start_flight_stabilizer;
 
 use crate::communication_interfaces::i2c::*;
 
-unsafe extern "C" fn comms_thread_task(params: *mut core::ffi::c_void) {
+unsafe extern "C" fn flight_thread_task(params: *mut core::ffi::c_void) {
     let controller_input_ptr = params as *const _ as *const Arc<RwLock<ControllerInput>>;
     let controller_input = controller_input_ptr.read();
-    // loop {
-    //     let mut input_data = input_data_lock.write().unwrap();
-    //     // log::info!("Kill {}", input_data.kill_motors);
-    //     input_data.kill_motors = true;
-    //     drop(input_data);
-    //     FreeRtos::delay_ms(500);
-    // }
-
-    WifiController::init_monitor(13, controller_input.clone());
+    start_flight_stabilizer(controller_input.clone());
     vTaskDelete(std::ptr::null_mut());
 }
 
@@ -59,13 +51,13 @@ fn main() {
         throttle: 0,
         kill_motors: false,
         start: false,
-        calibrate:false,
+        calibrate: false,
     };
     let control_input_values = Arc::new(RwLock::new(controller_input_shared));
 
     unsafe {
         xTaskCreatePinnedToCore(
-            Some(comms_thread_task),
+            Some(flight_thread_task),
             CString::new("Comms Task").unwrap().as_ptr(),
             4096,
             &control_input_values.clone() as *const _ as *mut c_void,
@@ -75,23 +67,5 @@ fn main() {
         )
     };
 
-    start_flight_stabilizer(control_input_values.clone());
-    // loop {
-    //     let data = control_input_values.read().unwrap();
-    //     println!("Data {}", data.start);
-    //     FreeRtos::delay_ms(1000);
-    // }
-
-    // unsafe {
-    //     xTaskCreatePinnedToCore(
-    //         Some(flight_control_thread_task),
-    //         CString::new("Flight Task").unwrap().as_ptr(),
-    //         4096,
-    //         std::ptr::null_mut(),
-    //         10,
-    //         std::ptr::null_mut(),
-    //         1,
-    //     )
-    // };
-    // wifi_driver.set_configuration(&Configuration::Client(ClientConfiguration{}))
+    WifiController::init_monitor(13, control_input_values.clone());
 }

@@ -27,6 +27,13 @@ const GYRO_ROLL_CALIBRATION_DEG: f32 = -0.03329770963243634;
 const GYRO_YAW_CALIBRATION_DEG: f32 = -0.06639503742574737;
 const US_IN_SECOND: f32 = 1_000_000.0_f32;
 
+const GYRO_DRIFT_DEG: f32 = 3.0_f32;
+const ACCEL_UNCERTAINTY_DEG: f32 = 3.0_f32;
+const MAX_ROTATION_RATE: f32 = 75.0_f32;
+const MIN_POWER: f32 = 10.0_f32;
+const MAX_POWER: f32 = 100.0_f32; // for the stabilizer
+const MAX_THROTTLE: f32 = 60.0_f32; // For the controller
+
 fn stabilizer_loop(
     imu: &mut MPU6050Sensor<I2cDriver<'static>>,
     motors_manager: &mut MotorsStateManager,
@@ -36,11 +43,6 @@ fn stabilizer_loop(
     let system_time = SystemTime::now();
 
     let mut previous_time_us = 0_u128;
-    const GYRO_DRIFT_DEG: f32 = 3.0_f32;
-    const ACCEL_UNCERTAINTY_DEG: f32 = 3.0_f32;
-    const MAX_ROTATION_RATE: f32 = 75.0_f32;
-    const MIN_POWER: f32 = 10.0_f32;
-    const MAX_POWER: f32 = 60.0_f32;
 
     let mut rotation_mode_flight_controller =
         RotationRateFlightController::new(MIN_POWER, MAX_POWER);
@@ -71,7 +73,7 @@ fn stabilizer_loop(
             continue;
         }
 
-        let throttle: f32 = (input_values.throttle as f32 / 255.0_f32) * 80.0_f32;
+        let throttle: f32 = (input_values.throttle as f32 / u8::max_value() as f32) * MAX_THROTTLE;
         let desired_rotation = RotationVector3D {
             pitch: (input_values.pitch as f32 / i32::max_value() as f32) * 100.0_f32,
             roll: (input_values.roll as f32 / i32::max_value() as f32) * 100.0_f32,
