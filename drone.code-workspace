@@ -18,6 +18,12 @@
     }
   ],
   "settings": {
+    "editor.wordBasedSuggestions": "off",
+    "editor.quickSuggestionsDelay": 200,
+    "rust-analyzer.cargo.features": [],
+    "rust-analyzer.checkOnSave": true,
+    "rust-analyzer.cargo.buildScripts.overrideCommand": null,
+    "rust-analyzer.cargo.target": "x86_64-unknown-linux-gnu",
     "files.exclude": {
       "**/.git": true,
       "**/.svn": true,

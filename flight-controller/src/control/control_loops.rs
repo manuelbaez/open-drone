@@ -6,7 +6,11 @@ use std::{
 use esp_idf_svc::hal::{delay::FreeRtos, i2c::I2cDriver, peripherals::Peripherals};
 
 use crate::{
-    communication_interfaces::wifi::{ControllerInput, CONTROLLER_INPUT_DATA},
+    communication_interfaces::wifi_control::ControllerInput,
+    config::constants::{
+        ACCEL_X_DEVIATION, ACCEL_Y_DEVIATION, ACCEL_Z_DEVIATION, GYRO_PITCH_CALIBRATION_DEG,
+        GYRO_ROLL_CALIBRATION_DEG, GYRO_YAW_CALIBRATION_DEG,
+    },
     control::{
         fligth_controllers::{
             AngleModeControllerInput, AngleModeFlightController, RotationRateControllerInput,
@@ -22,22 +26,19 @@ use crate::{
     output::motors_state_manager::MotorsStateManager,
 };
 
-const GYRO_PITCH_CALIBRATION_DEG: f32 = -1.9987461681754335;
-const GYRO_ROLL_CALIBRATION_DEG: f32 = -0.03329770963243634;
-const GYRO_YAW_CALIBRATION_DEG: f32 = -0.06639503742574737;
 const US_IN_SECOND: f32 = 1_000_000.0_f32;
 
-const GYRO_DRIFT_DEG: f32 = 3.0_f32;
-const ACCEL_UNCERTAINTY_DEG: f32 = 3.0_f32;
-const MAX_ROTATION_RATE: f32 = 75.0_f32;
-const MIN_POWER: f32 = 10.0_f32;
-const MAX_POWER: f32 = 100.0_f32; // for the stabilizer
-const MAX_THROTTLE: f32 = 60.0_f32; // For the controller
+#[derive(Default, Debug)]
+struct DebugValues {
+    exec_time_us: u128,
+    motor_power_values: [f32; 4],
+    angle_controller_output: RotationVector2D,
+}
 
 fn stabilizer_loop(
     imu: &mut MPU6050Sensor<I2cDriver<'static>>,
     motors_manager: &mut MotorsStateManager,
-    debug_values: Arc<RwLock<[f32; 5]>>,
+    debug_values: Arc<RwLock<DebugValues>>,
     control_input_values: Arc<RwLock<ControllerInput>>,
 ) {
     let system_time = SystemTime::now();
@@ -52,7 +53,27 @@ fn stabilizer_loop(
     let mut drone_on = false;
 
     loop {
-        let input_values = control_input_values.read().unwrap();
+        let input_values_lock = control_input_values.read().unwrap();
+        let current_time_us: u128 = system_time.elapsed().unwrap().as_micros();
+        let time_since_last_reading_seconds =
+            (current_time_us - previous_time_us) as f32 / US_IN_SECOND;
+
+        let input_values = ControllerInput {
+            roll: input_values_lock.roll,
+            yaw: input_values_lock.yaw,
+            pitch: input_values_lock.pitch,
+            start: input_values_lock.start,
+            kill_motors: input_values_lock.kill_motors,
+            calibrate: input_values_lock.calibrate,
+            throttle: input_values_lock.throttle,
+        };
+        drop(input_values_lock);
+
+        let mut debug_values_lock = debug_values.write().unwrap();
+        debug_values_lock.exec_time_us = current_time_us - previous_time_us;
+        drop(debug_values_lock);
+
+        previous_time_us = current_time_us;
 
         if input_values.start {
             drone_on = true;
@@ -68,25 +89,20 @@ fn stabilizer_loop(
         if !drone_on {
             motors_manager.set_motor_power([0.0, 0.0, 0.0, 0.0]);
             rotation_mode_flight_controller.reset();
-            drop(input_values);
             FreeRtos::delay_ms(5);
             continue;
         }
 
         let throttle: f32 = (input_values.throttle as f32 / u8::max_value() as f32) * MAX_THROTTLE;
+
         let desired_rotation = RotationVector3D {
-            pitch: (input_values.pitch as f32 / i32::max_value() as f32) * 100.0_f32,
-            roll: (input_values.roll as f32 / i32::max_value() as f32) * 100.0_f32,
+            pitch: (input_values.pitch as f32 / i32::max_value() as f32) * MAX_INCLINATION,
+            roll: (input_values.roll as f32 / i32::max_value() as f32) * MAX_INCLINATION,
             yaw: (input_values.yaw as f32 / i32::max_value() as f32) * 100.0_f32,
         };
-        drop(input_values);
-
-        let current_time_us: u128 = system_time.elapsed().unwrap().as_micros();
-        let time_since_last_reading_seconds =
-            (current_time_us - previous_time_us) as f32 / US_IN_SECOND;
 
         let rotation_rates = imu.get_rotation_rates();
-        let acceleration_angles: RotationVector2D = imu.get_roll_pitch_angles();
+        let acceleration_angles = imu.get_roll_pitch_angles();
 
         let angle_flight_controller_input = AngleModeControllerInput {
             measured_rotation_rate: RotationVector2D::from(&rotation_rates),
@@ -114,12 +130,11 @@ fn stabilizer_loop(
         motors_manager.set_motor_power(motor_output);
 
         let mut debug_values_lock = debug_values.write().unwrap();
-        debug_values_lock[0] = (current_time_us - previous_time_us) as f32;
-        previous_time_us = current_time_us;
-        debug_values_lock[1] = motor_output[0];
-        debug_values_lock[2] = motor_output[1];
-        debug_values_lock[3] = motor_output[2];
-        debug_values_lock[4] = motor_output[3];
+        debug_values_lock
+            .motor_power_values
+            .copy_from_slice(&motor_output);
+        debug_values_lock.angle_controller_output = desired_rotation_rate_2d;
+        drop(debug_values_lock);
     }
 }
 
@@ -131,9 +146,9 @@ pub fn start_flight_stabilizer(control_input_value: Arc<RwLock<ControllerInput>>
     let i2c_driver = get_i2c_driver(&mut peripherals);
 
     let acceleromenter_calibration = AccelerationVector3D {
-        x: 0.033,
-        y: -0.035,
-        z: 0.034,
+        x: ACCEL_X_DEVIATION,
+        y: ACCEL_Y_DEVIATION,
+        z: ACCEL_Z_DEVIATION,
     };
 
     let gyro_calibration = RotationVector3D {
@@ -144,8 +159,8 @@ pub fn start_flight_stabilizer(control_input_value: Arc<RwLock<ControllerInput>>
 
     let mut imu = MPU6050Sensor::new(i2c_driver, gyro_calibration, acceleromenter_calibration);
 
-    let debug_values = Arc::new(RwLock::new([0.0_f32, 0.0_f32, 0.0_f32, 0.0_f32, 0.0_f32]));
-    // Print values thread, for debugging purposes.
+    let debug_values = Arc::new(RwLock::new(DebugValues::default()));
+    // // Print values thread, for debugging purposes.
     {
         let control_input_arc = control_input_value.clone();
         let debug_values = debug_values.clone();
@@ -156,11 +171,11 @@ pub fn start_flight_stabilizer(control_input_value: Arc<RwLock<ControllerInput>>
                 // let control_input_values = control_input_arc.read().unwrap();
                 let values = control_input_arc.read().unwrap();
                 let debug_values_lock = debug_values.read().unwrap();
-                print!("Debug Values {:?}\n", debug_values_lock);
-                print!("Curent values{:?}\n", values);
-                drop(values);
+                println!("Debug Values {:?}", debug_values_lock);
+                // println!("Curent values{:?}", values);
                 drop(debug_values_lock);
-                FreeRtos::delay_ms(500);
+                drop(values);
+                FreeRtos::delay_ms(50);
             });
     }
 

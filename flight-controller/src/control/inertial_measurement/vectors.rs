@@ -4,6 +4,7 @@ pub struct AccelerationVector3D {
     pub z: f32,
 }
 
+#[derive(Debug)]
 pub struct RotationVector3D {
     pub roll: f32,
     pub pitch: f32,
@@ -30,6 +31,7 @@ impl Clone for RotationVector3D {
     }
 }
 
+#[derive(Debug, Default)]
 pub struct RotationVector2D {
     pub roll: f32,
     pub pitch: f32,

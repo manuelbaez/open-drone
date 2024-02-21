@@ -13,12 +13,17 @@ use std::sync::{Arc, RwLock};
 use esp_idf_svc::hal::delay::FreeRtos;
 use esp_idf_svc::sys::{esp_pm_config_t, esp_pm_configure, vTaskDelete, xTaskCreatePinnedToCore};
 
-use crate::communication_interfaces::wifi::{
+use crate::communication_interfaces::wifi_control::{
     ControllerInput, WifiController, CONTROLLER_INPUT_DATA,
 };
+use crate::config::constants::CONTROLLER_TYPE;
 use crate::control::control_loops::start_flight_stabilizer;
 
-use crate::communication_interfaces::i2c::*;
+use crate::communication_interfaces::{i2c::*, ControllerTypes};
+
+pub mod config {
+    pub mod constants;
+}
 
 unsafe extern "C" fn flight_thread_task(params: *mut core::ffi::c_void) {
     let controller_input_ptr = params as *const _ as *const Arc<RwLock<ControllerInput>>;
@@ -66,6 +71,12 @@ fn main() {
             1,
         )
     };
-
-    WifiController::init_monitor(13, control_input_values.clone());
+    match CONTROLLER_TYPE {
+        ControllerTypes::Wifi => {
+            WifiController::init_monitor(13, control_input_values.clone());
+        }
+        _ => {
+            panic!()
+        }
+    }
 }

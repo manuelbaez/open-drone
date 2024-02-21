@@ -53,12 +53,7 @@ impl RotationRateFlightController {
         let pitch_motor_input = self.map_pitch_to_motor_input(pitch_output);
         let yaw_motor_input = self.map_yaw_to_motor_input(yaw_output);
 
-        let throtlle_motor_input = Vector4::new(
-            input.throttle,
-            input.throttle,
-            input.throttle,
-            input.throttle,
-        );
+        let throtlle_motor_input = Vector4::from([input.throttle; 4]);
 
         let motor_input =
             throtlle_motor_input + roll_motor_input + pitch_motor_input + yaw_motor_input;
@@ -79,14 +74,9 @@ impl RotationRateFlightController {
     }
 
     fn validate_and_map_motor_output(&self, motor_inputs: Vector4<f32>) -> [f32; 4] {
-        let max_throttle_vector = Vector4::from([
-            self.motor_max_power,
-            self.motor_max_power,
-            self.motor_max_power,
-            self.motor_max_power,
-        ]);
+        let max_throttle_vector = Vector4::from([self.motor_max_power; 4]);
 
-        let exccess = (motor_inputs - max_throttle_vector).map(|value| {
+        let excess = (motor_inputs - max_throttle_vector).map(|value| {
             if value > 0.0 {
                 return value;
             } else {
@@ -94,7 +84,7 @@ impl RotationRateFlightController {
             }
         });
 
-        let capped_throttle = (motor_inputs - exccess).map(|value| {
+        let capped_throttle = (motor_inputs - excess).map(|value| {
             if value > self.motor_min_power {
                 return value;
             } else {

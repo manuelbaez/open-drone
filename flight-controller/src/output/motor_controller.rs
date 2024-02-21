@@ -7,8 +7,7 @@ use esp_idf_svc::hal::{
     ledc::{config::TimerConfig, LedcDriver, LedcTimerDriver, Resolution},
 };
 
-const MIN_MOTOR_DUTY: u32 = 8192;
-const MAX_MOTOR_DUTY: u32 = 16000;
+use crate::config::constants::{MAX_MOTOR_DUTY, MIN_MOTOR_DUTY};
 
 pub struct MotorConfig<TPin, TTimer, TChannel>
 where
@@ -30,7 +29,7 @@ impl MotorController {
         motor_config: MotorConfig<impl IOPin, impl Peripheral<P = T>, impl Peripheral<P = C>>,
     ) -> Self {
         let config = TimerConfig::default()
-            .frequency(4.kHz().into())
+            .frequency(ESC_PWM_FREQUENCY_HZ.Hz().into())
             .resolution(Resolution::Bits14);
 
         let timer_driver = LedcTimerDriver::new(motor_config.timer, &config).unwrap();
