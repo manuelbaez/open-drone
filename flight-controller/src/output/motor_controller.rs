@@ -7,7 +7,7 @@ use esp_idf_svc::hal::{
     ledc::{config::TimerConfig, LedcDriver, LedcTimerDriver, Resolution},
 };
 
-use crate::config::constants::{MAX_MOTOR_DUTY, MIN_MOTOR_DUTY};
+use crate::config::constants::{ESC_PWM_FREQUENCY_HZ, MAX_MOTOR_DUTY, MIN_MOTOR_DUTY};
 
 pub struct MotorConfig<TPin, TTimer, TChannel>
 where

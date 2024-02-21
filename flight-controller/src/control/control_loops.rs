@@ -8,8 +8,10 @@ use esp_idf_svc::hal::{delay::FreeRtos, i2c::I2cDriver, peripherals::Peripherals
 use crate::{
     communication_interfaces::wifi_control::ControllerInput,
     config::constants::{
-        ACCEL_X_DEVIATION, ACCEL_Y_DEVIATION, ACCEL_Z_DEVIATION, GYRO_PITCH_CALIBRATION_DEG,
-        GYRO_ROLL_CALIBRATION_DEG, GYRO_YAW_CALIBRATION_DEG,
+        ACCEL_UNCERTAINTY_DEG, ACCEL_X_DEVIATION, ACCEL_Y_DEVIATION, ACCEL_Z_DEVIATION,
+        GYRO_DRIFT_DEG, GYRO_PITCH_CALIBRATION_DEG, GYRO_ROLL_CALIBRATION_DEG,
+        GYRO_YAW_CALIBRATION_DEG, MAX_INCLINATION, MAX_POWER, MAX_ROTATION_RATE, MAX_THROTTLE,
+        MIN_POWER,
     },
     control::{
         fligth_controllers::{

@@ -34,6 +34,8 @@ use wifi_protocol::{
     payloads::{CustomSAPs, DroneMovementsFramePayload},
 };
 
+use crate::config::constants::{PAIRING_BSSID_ADDRESS, TRANSMITTER_ADDRESS};
+
 
 pub type ControllerInput = DroneMovementsFramePayload;
 
