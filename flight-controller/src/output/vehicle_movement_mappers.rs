@@ -1,6 +1,7 @@
 use std::ops::{Add, Sub};
 
-use super::inertial_measurement::vectors::RotationVector3D;
+use crate::control::inertial_measurement::vectors::RotationVector3D;
+
 
 pub enum VehicleTypesMapper {
     Quadcopter,

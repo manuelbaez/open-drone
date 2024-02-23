@@ -19,13 +19,13 @@ use control::inertial_measurement::mpu_6050::MPU6050Sensor;
 use control::inertial_measurement::vectors::{
     AccelerationVector3D, RotationVector2D, RotationVector3D,
 };
-use control::vehicle_movement_mappers::{
-    FlyingVehicleMovementMapper, Quadcopter, VehicleTypesMapper,
-};
 use esp_idf_svc::hal::delay::FreeRtos;
 use esp_idf_svc::hal::peripherals::Peripherals;
 use esp_idf_svc::sys::{esp_pm_config_t, esp_pm_configure, vTaskDelete, xTaskCreatePinnedToCore};
 use output::motors_state_manager::QuadcopterMotorsStateManager;
+use output::vehicle_movement_mappers::{
+    FlyingVehicleMovementMapper, Quadcopter, VehicleTypesMapper,
+};
 use wifi_protocol::payloads::DroneMovementsFramePayload;
 
 use crate::communication_interfaces::wifi_control::{

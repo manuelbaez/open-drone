@@ -1,5 +1,5 @@
 use crate::{
-    communication_interfaces::ControllerTypes, control::vehicle_movement_mappers::VehicleTypesMapper,
+    communication_interfaces::ControllerTypes, output::vehicle_movement_mappers::VehicleTypesMapper,
 };
 
 // Gyroscope Drift Calibrations

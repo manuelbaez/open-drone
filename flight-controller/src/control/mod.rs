@@ -4,4 +4,3 @@ pub mod inertial_measurement;
 pub mod integrator;
 pub mod kalman_filter;
 pub mod pid;
-pub mod vehicle_movement_mappers;
