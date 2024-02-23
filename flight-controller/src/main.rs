@@ -76,14 +76,10 @@ fn flight_thread(
     imu.enable_low_pass_filter(LowPassFrequencyValues::Freq10Hz);
     // Print telemetry values thread, for debugging/telemetry purposes, later will move this to it's own thread to send to controller.
     {
-        // let controller_input = controller_input.clone();
         let telemetry_data = telemetry_data.clone();
-
         let _ = std::thread::Builder::new()
             .stack_size(4096)
             .spawn(move || loop {
-                // let control_input_values = control_input_arc.read().unwrap();
-                // let values = control_input_arc.read().unwrap();
                 let debug_values_lock = telemetry_data.read().unwrap();
                 println!(
                     "Run Time: {:?} \n Rate Out: {:?} \n Angle Out: {:?} \n Motor {:?} \n Throttle {:?}" ,
@@ -93,9 +89,7 @@ fn flight_thread(
                     debug_values_lock.motors_power,
                     debug_values_lock.throttle
                 );
-                // println!("Curent values{:?}", values);
                 drop(debug_values_lock);
-                // drop(values);
                 FreeRtos::delay_ms(1000);
             });
     }
@@ -176,10 +170,11 @@ fn main() {
     let control_input = Arc::new(RwLock::new(controller_input_shared));
     let telemetry_data = Arc::new(RwLock::new(TelemetryDataValues::default()));
 
+    let flight_task_name = CString::new("Flight Controller Task").unwrap();
     unsafe {
         xTaskCreatePinnedToCore(
             Some(flight_thread_task_entrypoint),
-            CString::new("Comms Task").unwrap().as_ptr(),
+            flight_task_name.as_ptr(),
             4096,
             &FlightThreadInput {
                 controller_input: control_input.clone(),

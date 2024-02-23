@@ -155,7 +155,7 @@ impl WifiController {
             esp_wifi_set_promiscuous(true);
             esp_wifi_set_promiscuous_filter(filter_pointer);
             esp_wifi_set_promiscuous_rx_cb(Option::Some(Self::sniffer));
-            // esp_wifi_set_max_tx_power(80); //Set to 20dbm transmit power
+            esp_wifi_set_max_tx_power(80); //Set to 20dbm transmit power
             esp_wifi_set_channel(channel, wifi_second_chan_t_WIFI_SECOND_CHAN_NONE);
             // esp_wifi_80211_tx(wifi_interface_t_WIFI_IF_NAN, buffer, len, en_sys_seq);
             // esp_wifi_internal_tx(wifi_if, buffer, len)
