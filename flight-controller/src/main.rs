@@ -5,14 +5,18 @@ mod communication_interfaces;
 mod control;
 mod drivers;
 mod output;
+mod telemetry;
 mod util;
 pub mod config {
     pub mod constants;
 }
 
-use std::ffi::{c_void, CString};
-use std::sync::{Arc, RwLock};
-
+use crate::communication_interfaces::controller::RemoteControl;
+use crate::communication_interfaces::ibus::IBusController;
+use crate::communication_interfaces::wifi_control::WifiController;
+use crate::communication_interfaces::{i2c::*, ControllerTypes};
+use crate::config::constants::CONTROLLER_TYPE;
+use crate::control::control_loops::start_flight_controllers;
 use config::constants::{
     ACCEL_X_DEVIATION, ACCEL_Y_DEVIATION, ACCEL_Z_DEVIATION, GYRO_PITCH_CALIBRATION_DEG,
     GYRO_ROLL_CALIBRATION_DEG, GYRO_YAW_CALIBRATION_DEG, MAX_POWER, MIN_POWER, VEHICLE_TYPE,
@@ -27,25 +31,10 @@ use output::vehicle_movement_mappers::{
     FlyingVehicleMovementMapper, Quadcopter, VehicleTypesMapper,
 };
 use shared_definitions::controller::ControllerInput;
-use util::vectors::{AccelerationVector3D, RotationVector2D, RotationVector3D};
-
-use crate::communication_interfaces::wifi_control::WifiController;
-use crate::config::constants::CONTROLLER_TYPE;
-use crate::control::control_loops::start_flight_controllers;
-
-use crate::communication_interfaces::{i2c::*, ControllerTypes};
-
-#[derive(Default, Debug)]
-pub struct TelemetryDataValues {
-    loop_exec_time_us: u128,
-    rate_controller_output: RotationVector3D,
-    angle_controller_output: RotationVector2D,
-    kalman_predicted_state: RotationVector2D,
-    rotation_rate: RotationVector3D,
-    accelerometer_rotation: RotationVector2D,
-    motors_power: [f32; 4],
-    throttle: f32,
-}
+use std::ffi::{c_void, CString};
+use std::sync::{Arc, RwLock};
+use telemetry::TelemetryDataValues;
+use util::vectors::{AccelerationVector3D, RotationVector3D};
 
 struct FlightThreadInput {
     controller_input: Arc<RwLock<ControllerInput>>,
@@ -82,7 +71,7 @@ fn flight_thread(
             .spawn(move || loop {
                 let debug_values_lock = telemetry_data.read().unwrap();
                 println!(
-                    "Run Time: {:?} \n Rate Out: {:?} \n Angle Out: {:?} \n Motor {:?} \n Throttle {:?}" ,
+                    " Iteration Time: {:?} \n Rate Out: {:?} \n Angle Out: {:?} \n Motor {:?} \n Throttle {:?}" ,
                     debug_values_lock.loop_exec_time_us,
                     debug_values_lock.rate_controller_output,
                     debug_values_lock.angle_controller_output,
@@ -167,7 +156,7 @@ fn main() {
         calibrate: false,
     };
 
-    let control_input = Arc::new(RwLock::new(controller_input_shared));
+    let control_input_shared = Arc::new(RwLock::new(controller_input_shared));
     let telemetry_data = Arc::new(RwLock::new(TelemetryDataValues::default()));
 
     let flight_task_name = CString::new("Flight Controller Task").unwrap();
@@ -177,7 +166,7 @@ fn main() {
             flight_task_name.as_ptr(),
             4096,
             &FlightThreadInput {
-                controller_input: control_input.clone(),
+                controller_input: control_input_shared.clone(),
                 telemetry_data: telemetry_data.clone(),
             } as *const _ as *mut c_void,
             10,
@@ -185,12 +174,15 @@ fn main() {
             1,
         )
     };
+    
     match CONTROLLER_TYPE {
         ControllerTypes::Wifi => {
-            WifiController::init_monitor(13, control_input.clone());
+            let controller = WifiController::new();
+            controller.start_changes_monitor(control_input_shared)
         }
-        _ => {
-            panic!()
+        ControllerTypes::Ibus => {
+            let controller = IBusController::new();
+            controller.start_changes_monitor(control_input_shared)
         }
-    }
+    };
 }

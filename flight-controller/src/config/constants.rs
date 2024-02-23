@@ -34,3 +34,4 @@ pub const TRANSMITTER_ADDRESS: [u8; 6] = [0xf2, 0xda, 0xd7, 0x60, 0x7e, 0xa9];
 
 pub const CONTROLLER_TYPE: ControllerTypes = ControllerTypes::Wifi;
 pub const VEHICLE_TYPE: VehicleTypesMapper = VehicleTypesMapper::Quadcopter;
+pub const WIFI_CONTROLLER_CHANNEL: u8 = 13;

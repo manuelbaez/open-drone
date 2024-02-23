@@ -33,7 +33,11 @@ use std::{
     },
 };
 
-use crate::config::constants::{PAIRING_BSSID_ADDRESS, TRANSMITTER_ADDRESS};
+use crate::config::constants::{
+    PAIRING_BSSID_ADDRESS, TRANSMITTER_ADDRESS, WIFI_CONTROLLER_CHANNEL,
+};
+
+use super::controller::RemoteControl;
 
 //Had to construct my own struct as I couldn't work with the __IncompleteArrayField<> in wifi_promiscuous_pkt_t
 // #[derive(Debug, Default)]
@@ -137,11 +141,15 @@ impl WifiController {
             magic: WIFI_INIT_CONFIG_MAGIC as i32,
         }
     }
+    pub fn new() -> Self {
+        Self
+    }
+}
 
-    pub fn init_monitor(channel: u8, shared_controller_input: Arc<RwLock<ControllerInput>>) {
+impl RemoteControl for WifiController {
+    fn start_changes_monitor(&self, shared_controller_input: Arc<RwLock<ControllerInput>>) {
         unsafe {
             let filter: wifi_promiscuous_filter_t = wifi_promiscuous_filter_t {
-                // filter_mask: WIFI_PROMIS_FILTER_MASK_MGMT | WIFI_PROMIS_FILTER_MASK_DATA,
                 filter_mask: WIFI_PROMIS_FILTER_MASK_DATA,
             };
             let filter_pointer = &filter as *const _ as *const wifi_promiscuous_filter_t;
@@ -156,7 +164,10 @@ impl WifiController {
             esp_wifi_set_promiscuous_filter(filter_pointer);
             esp_wifi_set_promiscuous_rx_cb(Option::Some(Self::sniffer));
             esp_wifi_set_max_tx_power(80); //Set to 20dbm transmit power
-            esp_wifi_set_channel(channel, wifi_second_chan_t_WIFI_SECOND_CHAN_NONE);
+            esp_wifi_set_channel(
+                WIFI_CONTROLLER_CHANNEL,
+                wifi_second_chan_t_WIFI_SECOND_CHAN_NONE,
+            );
             // esp_wifi_80211_tx(wifi_interface_t_WIFI_IF_NAN, buffer, len, en_sys_seq);
             // esp_wifi_internal_tx(wifi_if, buffer, len)
         }
