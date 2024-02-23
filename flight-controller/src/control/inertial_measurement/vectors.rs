@@ -1,14 +1,61 @@
+use std::ops::{Add, AddAssign, Div, Sub};
+
+#[derive(Debug, Default)]
 pub struct AccelerationVector3D {
     pub x: f32,
     pub y: f32,
     pub z: f32,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct RotationVector3D {
-    pub roll: f32,
     pub pitch: f32,
+    pub roll: f32,
     pub yaw: f32,
+}
+
+impl Add<RotationVector3D> for RotationVector3D {
+    type Output = RotationVector3D;
+
+    fn add(self, rhs: RotationVector3D) -> Self::Output {
+        Self {
+            pitch: self.pitch + rhs.pitch,
+            roll: self.roll + rhs.roll,
+            yaw: self.yaw + rhs.yaw,
+        }
+    }
+}
+
+impl Sub<RotationVector3D> for RotationVector3D {
+    type Output = RotationVector3D;
+
+    fn sub(self, rhs: RotationVector3D) -> Self::Output {
+        Self {
+            pitch: self.pitch - rhs.pitch,
+            roll: self.roll - rhs.roll,
+            yaw: self.yaw - rhs.yaw,
+        }
+    }
+}
+
+impl AddAssign<RotationVector3D> for RotationVector3D {
+    fn add_assign(&mut self, rhs: RotationVector3D) {
+        self.pitch += rhs.pitch;
+        self.roll += rhs.roll;
+        self.yaw += rhs.yaw;
+    }
+}
+
+impl Div<f32> for RotationVector3D {
+    type Output = RotationVector3D;
+
+    fn div(self, rhs: f32) -> Self::Output {
+        Self {
+            pitch: self.pitch / rhs,
+            roll: self.roll / rhs,
+            yaw: self.yaw / rhs,
+        }
+    }
 }
 
 impl RotationVector3D {

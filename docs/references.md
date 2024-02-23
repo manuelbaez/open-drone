@@ -80,3 +80,5 @@ https://users.rust-lang.org/t/weird-behaviour-reading-from-a-linux-device-event-
     //         println!("Error during parsing :\n{}", err);
     //     }
     // };
+
+![alt text](image.png)

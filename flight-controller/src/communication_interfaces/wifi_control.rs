@@ -36,7 +36,6 @@ use wifi_protocol::{
 
 use crate::config::constants::{PAIRING_BSSID_ADDRESS, TRANSMITTER_ADDRESS};
 
-
 pub type ControllerInput = DroneMovementsFramePayload;
 
 //Had to construct my own struct as I couldn't work with the __IncompleteArrayField<> in wifi_promiscuous_pkt_t
@@ -145,21 +144,7 @@ impl WifiController {
         }
     }
 
-    pub fn init_monitor(channel: u8, controller_input: Arc<RwLock<ControllerInput>>) {
-        // loop {
-        //     let mut value = controller_input.write().unwrap();
-        //     value.kill_motors = true;
-        //     log::info!("Set true");
-        //     drop(value);
-        //     FreeRtos::delay_ms(1000);
-        //     let mut value = controller_input.write().unwrap();
-        //     value.kill_motors = false;
-        //     log::info!("Set false");
-        //     drop(value);
-        //     FreeRtos::delay_ms(1000);
-        // }
-
-        // CONTROLLER_INPUT_DATA = controller_input.read();
+    pub fn init_monitor(channel: u8, shared_controller_input: Arc<RwLock<ControllerInput>>) {
         unsafe {
             let filter: wifi_promiscuous_filter_t = wifi_promiscuous_filter_t {
                 // filter_mask: WIFI_PROMIS_FILTER_MASK_MGMT | WIFI_PROMIS_FILTER_MASK_DATA,
@@ -185,17 +170,19 @@ impl WifiController {
         loop {
             let ready = DATA_READY_LOCK.load(Ordering::Acquire);
             if ready {
-                let mut value = controller_input.write().unwrap();
-                let temporary = CONTROLLER_INPUT_DATA.read().unwrap();
-                value.kill_motors = temporary.kill_motors;
-                value.start = temporary.start;
-                value.calibrate = temporary.calibrate;
-                value.roll = temporary.roll;
-                value.pitch = temporary.pitch;
-                value.yaw = temporary.yaw;
-                value.throttle = temporary.throttle;
-                drop(value);
-                drop(temporary);
+                let mut shared_controller_input_lock = shared_controller_input.write().unwrap();
+                let intermediate_input_lock = CONTROLLER_INPUT_DATA.read().unwrap();
+                shared_controller_input_lock.kill_motors = intermediate_input_lock.kill_motors;
+                shared_controller_input_lock.start = intermediate_input_lock.start;
+                shared_controller_input_lock.calibrate = intermediate_input_lock.calibrate;
+                shared_controller_input_lock.roll = intermediate_input_lock.roll;
+                shared_controller_input_lock.pitch = intermediate_input_lock.pitch;
+                shared_controller_input_lock.yaw = intermediate_input_lock.yaw;
+                shared_controller_input_lock.throttle = intermediate_input_lock.throttle;
+                DATA_READY_LOCK.store(false, Ordering::Release);
+                drop(shared_controller_input_lock);
+                drop(intermediate_input_lock);
+                continue;
             }
 
             FreeRtos::delay_ms(1);

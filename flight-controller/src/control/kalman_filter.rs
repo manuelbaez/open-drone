@@ -41,10 +41,10 @@ impl KalmanFilter {
         self.state_prediction
     }
 
-    // pub fn get_current_state(&self) -> f32 {
-    //     self.state_prediction
-    // }
-    // pub fn get_current_uncertainty(&self) -> f32 {
-    //     self.prediction_uncertainty
-    // }
+    pub fn get_current_state(&self) -> f32 {
+        self.state_prediction
+    }
+    pub fn get_current_uncertainty(&self) -> f32 {
+        self.prediction_uncertainty
+    }
 }

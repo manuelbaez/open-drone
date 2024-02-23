@@ -25,37 +25,42 @@ use crate::{
         },
     },
     get_i2c_driver,
-    output::motors_state_manager::MotorsStateManager,
+    output::motors_state_manager::QuadcopterMotorsStateManager,
+    TelemetryDataValues,
 };
 
 const US_IN_SECOND: f32 = 1_000_000.0_f32;
 
-#[derive(Default, Debug)]
-struct DebugValues {
-    exec_time_us: u128,
-    motor_power_values: [f32; 4],
-    angle_controller_output: RotationVector2D,
+pub enum FlightStabilizerOutCommands {
+    CalibrateMotorController(),
+    KillMotors(),
+    UpdateFlightState(FlightStabilizerOut),
 }
 
-fn stabilizer_loop(
-    imu: &mut MPU6050Sensor<I2cDriver<'static>>,
-    motors_manager: &mut MotorsStateManager,
-    debug_values: Arc<RwLock<DebugValues>>,
-    control_input_values: Arc<RwLock<ControllerInput>>,
+#[derive(Debug)]
+pub struct FlightStabilizerOut {
+    pub throttle: f32,
+    pub rotation_output_command: RotationVector3D,
+}
+
+pub fn start_flight_controllers(
+    controller_input: Arc<RwLock<ControllerInput>>,
+    mut imu: MPU6050Sensor<I2cDriver<'_>>,
+    telemetry_data: Arc<RwLock<TelemetryDataValues>>,
+    mut controllers_out_callback: impl FnMut(FlightStabilizerOutCommands) -> (),
 ) {
     let system_time = SystemTime::now();
 
     let mut previous_time_us = 0_u128;
 
-    let mut rotation_mode_flight_controller =
-        RotationRateFlightController::new(MIN_POWER, MAX_POWER);
+    let mut rotation_mode_flight_controller = RotationRateFlightController::new();
     let mut angle_flight_controller =
         AngleModeFlightController::new(MAX_ROTATION_RATE, GYRO_DRIFT_DEG, ACCEL_UNCERTAINTY_DEG);
 
     let mut drone_on = false;
 
     loop {
-        let input_values_lock = control_input_values.read().unwrap();
+        let input_values_lock = controller_input.read().unwrap();
         let current_time_us: u128 = system_time.elapsed().unwrap().as_micros();
         let time_since_last_reading_seconds =
             (current_time_us - previous_time_us) as f32 / US_IN_SECOND;
@@ -71,25 +76,30 @@ fn stabilizer_loop(
         };
         drop(input_values_lock);
 
-        let mut debug_values_lock = debug_values.write().unwrap();
-        debug_values_lock.exec_time_us = current_time_us - previous_time_us;
+        let mut debug_values_lock = telemetry_data.write().unwrap();
+        debug_values_lock.loop_exec_time_us = current_time_us - previous_time_us;
         drop(debug_values_lock);
 
         previous_time_us = current_time_us;
 
-        if input_values.start {
+        if input_values.start && !drone_on {
             drone_on = true;
+            log::info!("Calibrating gyro");
+            let calibration_values = imu.calculate_drift_average();
+            imu.set_drift_calibration(calibration_values);
+            log::info!("Gyro calibrated");
         }
-        if input_values.kill_motors {
+
+        if input_values.kill_motors && drone_on {
             drone_on = false;
+            controllers_out_callback(FlightStabilizerOutCommands::KillMotors());
         }
 
         if input_values.calibrate && !drone_on {
-            motors_manager.calibrate_esc();
+            controllers_out_callback(FlightStabilizerOutCommands::CalibrateMotorController())
         }
 
         if !drone_on {
-            motors_manager.set_motor_power([0.0, 0.0, 0.0, 0.0]);
             rotation_mode_flight_controller.reset();
             FreeRtos::delay_ms(5);
             continue;
@@ -98,9 +108,9 @@ fn stabilizer_loop(
         let throttle: f32 = (input_values.throttle as f32 / u8::max_value() as f32) * MAX_THROTTLE;
 
         let desired_rotation = RotationVector3D {
-            pitch: (input_values.pitch as f32 / i32::max_value() as f32) * MAX_INCLINATION,
-            roll: (input_values.roll as f32 / i32::max_value() as f32) * MAX_INCLINATION,
-            yaw: (input_values.yaw as f32 / i32::max_value() as f32) * 100.0_f32,
+            pitch: (input_values.pitch as f32 / i16::max_value() as f32) * MAX_INCLINATION,
+            roll: (input_values.roll as f32 / i16::max_value() as f32) * MAX_INCLINATION,
+            yaw: -(input_values.yaw as f32 / i16::max_value() as f32) * MAX_ROTATION_RATE, //My controller is inverted, probably should do that there lol
         };
 
         let rotation_rates = imu.get_rotation_rates();
@@ -114,77 +124,34 @@ fn stabilizer_loop(
         };
 
         let desired_rotation_rate_2d: RotationVector2D =
-            angle_flight_controller.get_next_output(angle_flight_controller_input);
+            angle_flight_controller.get_next_output(angle_flight_controller_input.clone());
 
         let mut desired_rotation_rate = RotationVector3D::from(&desired_rotation_rate_2d);
         desired_rotation_rate.yaw = desired_rotation.yaw;
 
         let rotation_flight_controller_input = RotationRateControllerInput {
-            throttle,
             desired_rotation_rate,
-            measured_rotation_rate: rotation_rates,
+            measured_rotation_rate: rotation_rates.clone(),
             iteration_time: time_since_last_reading_seconds,
         };
 
-        let motor_output =
+        let controller_output =
             rotation_mode_flight_controller.get_next_output(rotation_flight_controller_input);
 
-        motors_manager.set_motor_power(motor_output);
-
-        let mut debug_values_lock = debug_values.write().unwrap();
-        debug_values_lock
-            .motor_power_values
-            .copy_from_slice(&motor_output);
-        debug_values_lock.angle_controller_output = desired_rotation_rate_2d;
-        drop(debug_values_lock);
+        let mut telemetry_data_lock = telemetry_data.write().unwrap();
+        telemetry_data_lock.rate_controller_output = controller_output.clone();
+        telemetry_data_lock.angle_controller_output = desired_rotation_rate_2d;
+        telemetry_data_lock.kalman_predicted_state =
+            angle_flight_controller.get_current_kalman_predicted_state();
+        telemetry_data_lock.rotation_rate = rotation_rates.clone();
+        telemetry_data_lock.accelerometer_rotation = acceleration_angles.clone();
+        drop(telemetry_data_lock);
+        
+        controllers_out_callback(FlightStabilizerOutCommands::UpdateFlightState(
+            FlightStabilizerOut {
+                rotation_output_command: controller_output,
+                throttle,
+            },
+        ));
     }
-}
-
-pub fn start_flight_stabilizer(control_input_value: Arc<RwLock<ControllerInput>>) {
-    let mut peripherals: Peripherals = Peripherals::take().unwrap();
-    let mut motors_manager = MotorsStateManager::new();
-    motors_manager.initialize_motor_controllers(&mut peripherals);
-
-    let i2c_driver = get_i2c_driver(&mut peripherals);
-
-    let acceleromenter_calibration = AccelerationVector3D {
-        x: ACCEL_X_DEVIATION,
-        y: ACCEL_Y_DEVIATION,
-        z: ACCEL_Z_DEVIATION,
-    };
-
-    let gyro_calibration = RotationVector3D {
-        roll: GYRO_ROLL_CALIBRATION_DEG,
-        pitch: GYRO_PITCH_CALIBRATION_DEG,
-        yaw: GYRO_YAW_CALIBRATION_DEG,
-    };
-
-    let mut imu = MPU6050Sensor::new(i2c_driver, gyro_calibration, acceleromenter_calibration);
-
-    let debug_values = Arc::new(RwLock::new(DebugValues::default()));
-    // // Print values thread, for debugging purposes.
-    {
-        let control_input_arc = control_input_value.clone();
-        let debug_values = debug_values.clone();
-
-        let _ = std::thread::Builder::new()
-            .stack_size(4096)
-            .spawn(move || loop {
-                // let control_input_values = control_input_arc.read().unwrap();
-                let values = control_input_arc.read().unwrap();
-                let debug_values_lock = debug_values.read().unwrap();
-                println!("Debug Values {:?}", debug_values_lock);
-                // println!("Curent values{:?}", values);
-                drop(debug_values_lock);
-                drop(values);
-                FreeRtos::delay_ms(50);
-            });
-    }
-
-    stabilizer_loop(
-        &mut imu,
-        &mut motors_manager,
-        debug_values,
-        control_input_value,
-    );
 }
