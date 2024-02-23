@@ -1,6 +1,7 @@
 use std::{thread::sleep, time::Duration};
 
-use super::vectors::{AccelerationVector3D, RotationVector2D, RotationVector3D};
+use crate::util::vectors::{AccelerationVector3D, RotationVector2D, RotationVector3D};
+
 
 pub trait Accelerometer {
     fn get_acceleration_vector(&mut self) -> AccelerationVector3D;

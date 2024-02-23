@@ -15,4 +15,5 @@ pcap = "1.2.0"
 proctitle = "0.1.1"
 radiotap = "1.3.0"
 rawsock = "0.3.0"
-wifi-protocol= { path="../wifi-protocol" }
+shared-definitions = { path = "../shared-definitions" }
+

@@ -13,8 +13,8 @@
       "path": "./controller-transmitter"
     },
     {
-      "name": "Wifi",
-      "path": "./wifi-protocol"
+      "name": "Shared Definitions",
+      "path": "./shared-definitions"
     }
   ],
   "settings": {
@@ -23,7 +23,7 @@
     "rust-analyzer.cargo.features": [],
     "rust-analyzer.checkOnSave": true,
     "rust-analyzer.cargo.buildScripts.overrideCommand": null,
-    "rust-analyzer.cargo.target": "x86_64-unknown-linux-gnu",
+    // "rust-analyzer.cargo.target": "stable-x86_64-unknown-linux-gnu",
     "files.exclude": {
       "**/.git": true,
       "**/.svn": true,

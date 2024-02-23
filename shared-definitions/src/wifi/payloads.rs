@@ -17,14 +17,3 @@ impl TryFrom<u8> for CustomSAPs {
     }
 }
 
-#[derive(Debug)]
-#[repr(C, packed)]
-pub struct DroneMovementsFramePayload {
-    pub roll: i16,
-    pub pitch: i16,
-    pub yaw: i16,
-    pub throttle: u8,
-    pub kill_motors: bool,
-    pub start: bool,
-    pub calibrate: bool,
-}

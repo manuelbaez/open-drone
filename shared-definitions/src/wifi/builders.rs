@@ -1,6 +1,6 @@
 use std::mem;
 
-use crate::{
+use super::{
     ieee80211_frames::{
         FrameControl, IBSSWifiPacketFrame, LogicalLinkControl, MacAddr, SequenceControl,
     },

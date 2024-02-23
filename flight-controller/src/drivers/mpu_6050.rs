@@ -1,15 +1,25 @@
 use esp_idf_svc::hal::delay::FreeRtos;
 use libm::{atan2f, sqrtf};
-use mpu6050::Mpu6050;
+use mpu6050::{device::GyroRange, Mpu6050};
 
-use crate::I2cGenericDriver;
-
-use super::{
-    imu_sensors::{Accelerometer, Gyroscope},
-    vectors::{AccelerationVector3D, RotationVector2D, RotationVector3D},
+use crate::{
+    util::vectors::{AccelerationVector3D, RotationVector2D, RotationVector3D},
+    I2cGenericDriver,
 };
 
-const GYRO_HIGHPASS_FILTER: f32 = 0.0;
+use super::imu_sensors::{Accelerometer, Gyroscope};
+
+struct MPURegisters;
+impl MPURegisters {
+    pub const GYRO_LOW_PASS_FILTER: u8 = 0x1A;
+}
+
+#[repr(u8)]
+#[allow(dead_code)]
+pub enum LowPassFrequencyValues {
+    Freq10Hz = 0x5,
+    Freq21Hz = 0x4,
+}
 
 pub struct MPU6050Sensor<I> {
     driver: Mpu6050<I>,
@@ -28,11 +38,20 @@ where
     ) -> Self {
         let mut mpu = Mpu6050::new(i2c_driver);
         mpu.init(&mut FreeRtos).unwrap();
+        mpu.set_gyro_range(GyroRange::D500).unwrap();
+        FreeRtos::delay_ms(100);
         MPU6050Sensor {
             driver: mpu,
             gyro_drift_calibration: gyro_rate_calibration,
             accelerometer_calibration,
         }
+    }
+
+    pub fn enable_low_pass_filter(&mut self, low_pass_freq: LowPassFrequencyValues) {
+        self.driver
+            .write_byte(MPURegisters::GYRO_LOW_PASS_FILTER, low_pass_freq as u8)
+            .unwrap(); //Set to 10hz
+        FreeRtos::delay_ms(100);
     }
 }
 
@@ -84,24 +103,7 @@ where
     }
 
     fn get_rotation_rates(&mut self) -> RotationVector3D {
-        let rotation_rates = self.get_rotation_rates_uncalibrated() - self.gyro_drift_calibration.clone();
-        RotationVector3D {
-            pitch: if rotation_rates.pitch.abs() > GYRO_HIGHPASS_FILTER {
-                rotation_rates.pitch
-            } else {
-                0.0
-            },
-            roll: if rotation_rates.roll.abs() > GYRO_HIGHPASS_FILTER {
-                rotation_rates.roll
-            } else {
-                0.0
-            },
-            yaw: if rotation_rates.yaw.abs() > GYRO_HIGHPASS_FILTER {
-                rotation_rates.yaw
-            } else {
-                0.0
-            },
-        }
+        self.get_rotation_rates_uncalibrated() - self.gyro_drift_calibration.clone()
     }
 
     fn set_drift_calibration(&mut self, claibration: RotationVector3D) {

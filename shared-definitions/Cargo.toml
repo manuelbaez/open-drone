@@ -1,11 +1,11 @@
 [package]
-name = "wifi-protocol"
+name = "shared-definitions"
 version = "0.1.0"
 edition = "2021"
 
 [lib]
-name="wifi_protocol"
-path = "src/wifi.rs"
+name="shared_definitions"
+path = "src/mod.rs"
 
 [dependencies]
 bitfield-struct = "0.6.0"

@@ -3,11 +3,14 @@
 
 mod communication_interfaces;
 mod control;
+mod drivers;
 mod output;
 mod util;
+pub mod config {
+    pub mod constants;
+}
 
 use std::ffi::{c_void, CString};
-use std::mem;
 use std::sync::{Arc, RwLock};
 
 use config::constants::{
@@ -15,10 +18,7 @@ use config::constants::{
     GYRO_ROLL_CALIBRATION_DEG, GYRO_YAW_CALIBRATION_DEG, MAX_POWER, MIN_POWER, VEHICLE_TYPE,
 };
 use control::control_loops::FlightStabilizerOutCommands;
-use control::inertial_measurement::mpu_6050::MPU6050Sensor;
-use control::inertial_measurement::vectors::{
-    AccelerationVector3D, RotationVector2D, RotationVector3D,
-};
+use drivers::mpu_6050::{LowPassFrequencyValues, MPU6050Sensor};
 use esp_idf_svc::hal::delay::FreeRtos;
 use esp_idf_svc::hal::peripherals::Peripherals;
 use esp_idf_svc::sys::{esp_pm_config_t, esp_pm_configure, vTaskDelete, xTaskCreatePinnedToCore};
@@ -26,19 +26,14 @@ use output::motors_state_manager::QuadcopterMotorsStateManager;
 use output::vehicle_movement_mappers::{
     FlyingVehicleMovementMapper, Quadcopter, VehicleTypesMapper,
 };
-use wifi_protocol::payloads::DroneMovementsFramePayload;
+use shared_definitions::controller::ControllerInput;
+use util::vectors::{AccelerationVector3D, RotationVector2D, RotationVector3D};
 
-use crate::communication_interfaces::wifi_control::{
-    ControllerInput, WifiController, CONTROLLER_INPUT_DATA,
-};
+use crate::communication_interfaces::wifi_control::WifiController;
 use crate::config::constants::CONTROLLER_TYPE;
 use crate::control::control_loops::start_flight_controllers;
 
 use crate::communication_interfaces::{i2c::*, ControllerTypes};
-
-pub mod config {
-    pub mod constants;
-}
 
 #[derive(Default, Debug)]
 pub struct TelemetryDataValues {
@@ -78,10 +73,10 @@ fn flight_thread(
     };
 
     let mut imu = MPU6050Sensor::new(i2c_driver, gyro_calibration, acceleromenter_calibration);
-
+    imu.enable_low_pass_filter(LowPassFrequencyValues::Freq10Hz);
     // Print telemetry values thread, for debugging/telemetry purposes, later will move this to it's own thread to send to controller.
     {
-        let controller_input = controller_input.clone();
+        // let controller_input = controller_input.clone();
         let telemetry_data = telemetry_data.clone();
 
         let _ = std::thread::Builder::new()

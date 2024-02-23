@@ -3,31 +3,23 @@ use std::{
     time::SystemTime,
 };
 
-use esp_idf_svc::hal::{delay::FreeRtos, i2c::I2cDriver, peripherals::Peripherals};
+use esp_idf_svc::hal::{delay::FreeRtos, i2c::I2cDriver};
+use shared_definitions::controller::ControllerInput;
 
+use crate::drivers::imu_sensors::Gyroscope;
 use crate::{
-    communication_interfaces::wifi_control::ControllerInput,
     config::constants::{
-        ACCEL_UNCERTAINTY_DEG, ACCEL_X_DEVIATION, ACCEL_Y_DEVIATION, ACCEL_Z_DEVIATION,
-        GYRO_DRIFT_DEG, GYRO_PITCH_CALIBRATION_DEG, GYRO_ROLL_CALIBRATION_DEG,
-        GYRO_YAW_CALIBRATION_DEG, MAX_INCLINATION, MAX_POWER, MAX_ROTATION_RATE, MAX_THROTTLE,
-        MIN_POWER,
+        ACCEL_UNCERTAINTY_DEG, GYRO_DRIFT_DEG, MAX_INCLINATION, MAX_ROTATION_RATE, MAX_THROTTLE,
     },
-    control::{
-        fligth_controllers::{
-            AngleModeControllerInput, AngleModeFlightController, RotationRateControllerInput,
-            RotationRateFlightController,
-        },
-        inertial_measurement::{
-            imu_sensors::{Accelerometer, Gyroscope},
-            mpu_6050::MPU6050Sensor,
-            vectors::{AccelerationVector3D, RotationVector2D, RotationVector3D},
-        },
+    control::fligth_controllers::{
+        AngleModeControllerInput, AngleModeFlightController, RotationRateControllerInput,
+        RotationRateFlightController,
     },
-    get_i2c_driver,
-    output::motors_state_manager::QuadcopterMotorsStateManager,
+    drivers::mpu_6050::MPU6050Sensor,
+    util::vectors::RotationVector2D,
     TelemetryDataValues,
 };
+use crate::{drivers::imu_sensors::Accelerometer, util::vectors::RotationVector3D};
 
 const US_IN_SECOND: f32 = 1_000_000.0_f32;
 
@@ -146,7 +138,7 @@ pub fn start_flight_controllers(
         telemetry_data_lock.rotation_rate = rotation_rates.clone();
         telemetry_data_lock.accelerometer_rotation = acceleration_angles.clone();
         drop(telemetry_data_lock);
-        
+
         controllers_out_callback(FlightStabilizerOutCommands::UpdateFlightState(
             FlightStabilizerOut {
                 rotation_output_command: controller_output,

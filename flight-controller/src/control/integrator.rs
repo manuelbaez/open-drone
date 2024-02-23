@@ -1,7 +1,9 @@
+#[allow(dead_code)]
 pub struct Integrator {
     current_value: f32,
 }
 
+#[allow(dead_code)]
 impl Integrator {
     pub fn new() -> Self {
         Integrator {
@@ -9,7 +11,7 @@ impl Integrator {
         }
     }
 
-    pub fn add_new_value(&mut self, value: f32, interval_seconds: f32) ->f32 {
+    pub fn add_new_value(&mut self, value: f32, interval_seconds: f32) -> f32 {
         self.current_value += value * interval_seconds;
         self.current_value
     }

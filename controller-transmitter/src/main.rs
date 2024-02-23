@@ -4,12 +4,7 @@ extern crate rawsock;
 use std::{mem, thread::sleep, time::Duration};
 
 use pcap::Device;
-use wifi_protocol::{
-    builders::{build_ibss_broadcast_data_frame, build_radiotap},
-    ieee80211_frames::{IBSSWifiPacketFrame, MacAddr},
-    payloads::{CustomSAPs, DroneMovementsFramePayload},
-    radiotap::{DataRate, RadiotapPacket},
-};
+use shared_definitions::{controller::ControllerInput, wifi::{builders::{build_ibss_broadcast_data_frame, build_radiotap}, ieee80211_frames::{IBSSWifiPacketFrame, MacAddr}, payloads::CustomSAPs, radiotap::{DataRate, RadiotapPacket}}};
 
 use crate::input::ControlInputMapper;
 
@@ -38,7 +33,7 @@ fn main() {
             current_input.start_motors,
             current_input.calibrate,
         );
-        let packet_payload = DroneMovementsFramePayload {
+        let packet_payload = ControllerInput {
             throttle: current_input.throttle,
             pitch: current_input.pitch,
             roll: current_input.roll,
@@ -59,7 +54,7 @@ fn main() {
 
         let radiotap_packet = build_radiotap(DataRate::Rate1Mbps, wifi_frame);
         let radiotap_packet_size: usize =
-            mem::size_of::<RadiotapPacket<IBSSWifiPacketFrame<DroneMovementsFramePayload>>>();
+            mem::size_of::<RadiotapPacket<IBSSWifiPacketFrame<ControllerInput>>>();
         let radiotap_packet_pointer = &radiotap_packet as *const _ as *mut u8;
         let radiotap_data =
             unsafe { core::slice::from_raw_parts(radiotap_packet_pointer, radiotap_packet_size) };

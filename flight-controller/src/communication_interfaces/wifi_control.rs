@@ -1,42 +1,39 @@
-use esp_idf_svc::{
-    hal::delay::FreeRtos,
-    sys::{
-        esp_wifi_80211_tx, esp_wifi_init, esp_wifi_internal_tx, esp_wifi_set_channel,
-        esp_wifi_set_max_tx_power, esp_wifi_set_mode, esp_wifi_set_promiscuous,
-        esp_wifi_set_promiscuous_filter, esp_wifi_set_promiscuous_rx_cb, esp_wifi_set_storage,
-        esp_wifi_start, g_wifi_default_wpa_crypto_funcs, g_wifi_feature_caps, g_wifi_osi_funcs,
-        nvs_flash_init, wifi_init_config_t, wifi_interface_t_WIFI_IF_NAN,
-        wifi_mode_t_WIFI_MODE_NULL, wifi_osi_funcs_t, wifi_pkt_rx_ctrl_t,
-        wifi_promiscuous_filter_t, wifi_promiscuous_pkt_t, wifi_promiscuous_pkt_type_t,
-        wifi_promiscuous_pkt_type_t_WIFI_PKT_CTRL, wifi_promiscuous_pkt_type_t_WIFI_PKT_DATA,
-        wifi_promiscuous_pkt_type_t_WIFI_PKT_MGMT, wifi_second_chan_t_WIFI_SECOND_CHAN_NONE,
-        wifi_storage_t_WIFI_STORAGE_RAM, CONFIG_ESP_WIFI_DYNAMIC_RX_BUFFER_NUM,
-        CONFIG_ESP_WIFI_ESPNOW_MAX_ENCRYPT_NUM, CONFIG_ESP_WIFI_STATIC_RX_BUFFER_NUM,
-        CONFIG_ESP_WIFI_TX_BUFFER_TYPE, WIFI_AMPDU_RX_ENABLED, WIFI_AMPDU_TX_ENABLED,
-        WIFI_AMSDU_TX_ENABLED, WIFI_CACHE_TX_BUFFER_NUM, WIFI_CSI_ENABLED, WIFI_DEFAULT_RX_BA_WIN,
-        WIFI_DYNAMIC_TX_BUFFER_NUM, WIFI_INIT_CONFIG_MAGIC, WIFI_MGMT_SBUF_NUM,
-        WIFI_NANO_FORMAT_ENABLED, WIFI_NVS_ENABLED, WIFI_PROMIS_FILTER_MASK_ALL,
-        WIFI_PROMIS_FILTER_MASK_DATA, WIFI_PROMIS_FILTER_MASK_MGMT, WIFI_SOFTAP_BEACON_MAX_LEN,
-        WIFI_STATIC_TX_BUFFER_NUM, WIFI_STA_DISCONNECTED_PM_ENABLED, WIFI_TASK_CORE_ID,
+use esp_idf_svc::hal::delay::FreeRtos;
+use esp_idf_svc::sys::{
+    esp_wifi_init, esp_wifi_internal_tx, esp_wifi_set_channel, esp_wifi_set_max_tx_power,
+    esp_wifi_set_mode, esp_wifi_set_promiscuous, esp_wifi_set_promiscuous_filter,
+    esp_wifi_set_promiscuous_rx_cb, esp_wifi_set_storage, esp_wifi_start,
+    g_wifi_default_wpa_crypto_funcs, g_wifi_feature_caps, g_wifi_osi_funcs, nvs_flash_init,
+    wifi_init_config_t, wifi_mode_t_WIFI_MODE_NULL, wifi_osi_funcs_t, wifi_pkt_rx_ctrl_t,
+    wifi_promiscuous_filter_t, wifi_promiscuous_pkt_type_t,
+};
+use esp_idf_svc::sys::{
+    wifi_second_chan_t_WIFI_SECOND_CHAN_NONE, wifi_storage_t_WIFI_STORAGE_RAM,
+    CONFIG_ESP_WIFI_DYNAMIC_RX_BUFFER_NUM, CONFIG_ESP_WIFI_ESPNOW_MAX_ENCRYPT_NUM,
+    CONFIG_ESP_WIFI_STATIC_RX_BUFFER_NUM, CONFIG_ESP_WIFI_TX_BUFFER_TYPE, WIFI_AMPDU_RX_ENABLED,
+    WIFI_AMPDU_TX_ENABLED, WIFI_AMSDU_TX_ENABLED, WIFI_CACHE_TX_BUFFER_NUM, WIFI_CSI_ENABLED,
+    WIFI_DEFAULT_RX_BA_WIN, WIFI_DYNAMIC_TX_BUFFER_NUM, WIFI_INIT_CONFIG_MAGIC, WIFI_MGMT_SBUF_NUM,
+    WIFI_NANO_FORMAT_ENABLED, WIFI_NVS_ENABLED, WIFI_PROMIS_FILTER_MASK_DATA,
+    WIFI_SOFTAP_BEACON_MAX_LEN, WIFI_STATIC_TX_BUFFER_NUM, WIFI_STA_DISCONNECTED_PM_ENABLED,
+    WIFI_TASK_CORE_ID,
+};
+use shared_definitions::{
+    controller::ControllerInput,
+    wifi::{
+        ieee80211_frames::{GenericWifiPacketFrameHeader, IBSSWifiPacketFrame},
+        payloads::CustomSAPs,
     },
 };
 use std::{
     ffi::c_void,
     mem,
-    ops::Deref,
     sync::{
         atomic::{AtomicBool, Ordering},
-        Arc, Mutex, RwLock,
+        Arc, RwLock,
     },
-};
-use wifi_protocol::{
-    ieee80211_frames::{GenericWifiPacketFrameHeader, IBSSWifiPacketFrame},
-    payloads::{CustomSAPs, DroneMovementsFramePayload},
 };
 
 use crate::config::constants::{PAIRING_BSSID_ADDRESS, TRANSMITTER_ADDRESS};
-
-pub type ControllerInput = DroneMovementsFramePayload;
 
 //Had to construct my own struct as I couldn't work with the __IncompleteArrayField<> in wifi_promiscuous_pkt_t
 // #[derive(Debug, Default)]
@@ -95,11 +92,9 @@ impl WifiController {
             let dsap = llc.dsap();
             match CustomSAPs::try_from(dsap).unwrap() {
                 CustomSAPs::ControllerFrame => {
-                    let parsed_packet: IBSSWifiPacketFrame<DroneMovementsFramePayload> =
-                        mem::zeroed();
+                    let parsed_packet: IBSSWifiPacketFrame<ControllerInput> = mem::zeroed();
 
-                    let parsed_packet_size =
-                        mem::size_of::<IBSSWifiPacketFrame<DroneMovementsFramePayload>>();
+                    let parsed_packet_size = mem::size_of::<IBSSWifiPacketFrame<ControllerInput>>();
                     let parsed_packet_buffer = core::slice::from_raw_parts_mut(
                         &parsed_packet as *const _ as *mut u8,
                         parsed_packet_size,
@@ -112,7 +107,6 @@ impl WifiController {
 
                     // log::info!("Packet {:02x?}", frame_control);
                 }
-                _ => (),
             }
         }
     }

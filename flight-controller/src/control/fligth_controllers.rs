@@ -1,10 +1,6 @@
-use nalgebra::Vector4;
+use crate::util::vectors::{RotationVector2D, RotationVector3D};
 
-use super::{
-    inertial_measurement::vectors::{RotationVector2D, RotationVector3D},
-    kalman_filter::KalmanFilter,
-    pid::PID,
-};
+use super::{kalman_filter::KalmanFilter, pid::PID};
 
 pub struct RotationRateControllerInput {
     pub desired_rotation_rate: RotationVector3D,

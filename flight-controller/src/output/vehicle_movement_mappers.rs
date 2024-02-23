@@ -1,7 +1,6 @@
-use std::ops::{Add, Sub};
+use std::ops::Add;
 
-use crate::control::inertial_measurement::vectors::RotationVector3D;
-
+use crate::util::vectors::RotationVector3D;
 
 pub enum VehicleTypesMapper {
     Quadcopter,
@@ -48,13 +47,13 @@ impl Add for QuadcoperActuatorsValues {
 
 impl QuadcoperActuatorsValues {
     fn constraint_value(value: f32, min: f32, max: f32) -> f32 {
-        // if value > max {
-        //     return max;
-        // }
-        // if value < min {
-        //     return min;
-        // }
-        return value;
+        if value > max {
+            return max;
+        }
+        if value < min {
+            return min;
+        }
+        value
     }
 
     fn get_constrained_to_valid_ranges(&self, min: f32, max: f32) -> Self {
@@ -121,7 +120,7 @@ impl FlyingVehicleMovementMapper<QuadcoperActuatorsValues> for Quadcopter {
         let combined_output = motors_throttle + pitch_input + roll_input + yaw_input;
         combined_output.get_constrained_to_valid_ranges(
             self.motor_min_power.clone(),
-            self.motor_min_power.clone(),
+            self.motor_max_power.clone(),
         )
     }
 }
