@@ -2,10 +2,12 @@ use std::{thread::sleep, time::Duration};
 
 use crate::util::vectors::{AccelerationVector3D, RotationVector2D, RotationVector3D};
 
-
 pub trait Accelerometer {
     fn get_acceleration_vector(&mut self) -> AccelerationVector3D;
-    fn get_roll_pitch_angles(&mut self) -> RotationVector2D;
+    fn get_roll_pitch_angles(
+        &mut self,
+        acceleration_vector: AccelerationVector3D,
+    ) -> RotationVector2D;
 }
 
 pub trait Gyroscope {
@@ -24,4 +26,8 @@ pub trait Gyroscope {
     }
 
     fn set_drift_calibration(&mut self, claibration: RotationVector3D);
+}
+
+pub trait CombinedGyroscopeAccelerometer {
+    fn get_combined_gyro_accel_output(&mut self) -> (RotationVector3D, AccelerationVector3D);
 }

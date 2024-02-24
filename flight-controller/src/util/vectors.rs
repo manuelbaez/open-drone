@@ -1,12 +1,23 @@
 use std::ops::{Add, AddAssign, Div, Sub};
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct AccelerationVector3D {
     pub x: f32,
     pub y: f32,
     pub z: f32,
 }
 
+impl Sub<AccelerationVector3D> for AccelerationVector3D {
+    type Output = AccelerationVector3D;
+
+    fn sub(self, rhs: AccelerationVector3D) -> Self::Output {
+        Self {
+            x: self.x - rhs.x,
+            y: self.y - rhs.y,
+            z: self.z - rhs.z,
+        }
+    }
+}
 #[derive(Debug, Default)]
 pub struct RotationVector3D {
     pub pitch: f32,

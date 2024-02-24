@@ -22,7 +22,8 @@ use config::constants::{
     GYRO_ROLL_CALIBRATION_DEG, GYRO_YAW_CALIBRATION_DEG, MAX_POWER, MIN_POWER, VEHICLE_TYPE,
 };
 use control::control_loops::FlightStabilizerOutCommands;
-use drivers::mpu_6050::{LowPassFrequencyValues, MPU6050Sensor};
+use drivers::mpu_6050::device::MPU6050Sensor;
+use drivers::mpu_6050::registers::LowPassFrequencyValues;
 use esp_idf_svc::hal::delay::FreeRtos;
 use esp_idf_svc::hal::peripherals::Peripherals;
 use esp_idf_svc::sys::{esp_pm_config_t, esp_pm_configure, vTaskDelete, xTaskCreatePinnedToCore};
@@ -63,6 +64,7 @@ fn flight_thread(
 
     let mut imu = MPU6050Sensor::new(i2c_driver, gyro_calibration, acceleromenter_calibration);
     imu.enable_low_pass_filter(LowPassFrequencyValues::Freq10Hz);
+    imu.init();
     // Print telemetry values thread, for debugging/telemetry purposes, later will move this to it's own thread to send to controller.
     {
         let telemetry_data = telemetry_data.clone();
