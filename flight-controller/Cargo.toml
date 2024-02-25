@@ -31,9 +31,7 @@ embassy = [
 log = { version = "0.4", default-features = false }
 esp-idf-svc = { version = "0.48.0", default-features = false }
 embedded-hal = { version = "1.0.0", package = "embedded-hal" }
-rayon = "1.8.1"
 libm = "0.2.8"
-nalgebra = "0.32.3"
 libwifi = "0.3.1"
 shared-definitions = { path = "../shared-definitions" }
 bitfield-struct = "0.6.0"

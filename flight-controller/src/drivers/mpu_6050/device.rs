@@ -55,8 +55,11 @@ where
     }
 
     pub fn init(&mut self) {
+        FreeRtos::delay_ms(250);
         self.update_gyro_config_register();
+        FreeRtos::delay_ms(5);
         self.update_accel_config_register();
+        FreeRtos::delay_ms(5);
         self.set_power_management_register_default();
         FreeRtos::delay_ms(250);
     }

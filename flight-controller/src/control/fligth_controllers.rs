@@ -17,8 +17,8 @@ pub struct RotationRateFlightController {
 impl RotationRateFlightController {
     pub fn new() -> Self {
         RotationRateFlightController {
-            roll_pid: PID::new(0.1, 0.0, 0.01),
-            pitch_pid: PID::new(0.1, 0.0, 0.01),
+            roll_pid: PID::new(0.1, 0.001, 0.03),
+            pitch_pid: PID::new(0.1, 0.001, 0.03),
             yaw_pid: PID::new(0.1, 0.0, 0.0),
         }
     }

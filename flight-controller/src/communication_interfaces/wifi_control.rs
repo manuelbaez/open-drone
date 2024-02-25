@@ -175,8 +175,8 @@ impl RemoteControl for WifiController {
         loop {
             let ready = DATA_READY_LOCK.load(Ordering::Acquire);
             if ready {
-                let mut shared_controller_input_lock = shared_controller_input.write().unwrap();
                 let intermediate_input_lock = CONTROLLER_INPUT_DATA.read().unwrap();
+                let mut shared_controller_input_lock = shared_controller_input.write().unwrap();
                 shared_controller_input_lock.kill_motors = intermediate_input_lock.kill_motors;
                 shared_controller_input_lock.start = intermediate_input_lock.start;
                 shared_controller_input_lock.calibrate = intermediate_input_lock.calibrate;
@@ -184,12 +184,11 @@ impl RemoteControl for WifiController {
                 shared_controller_input_lock.pitch = intermediate_input_lock.pitch;
                 shared_controller_input_lock.yaw = intermediate_input_lock.yaw;
                 shared_controller_input_lock.throttle = intermediate_input_lock.throttle;
-                DATA_READY_LOCK.store(false, Ordering::Release);
                 drop(shared_controller_input_lock);
                 drop(intermediate_input_lock);
+                DATA_READY_LOCK.store(false, Ordering::Release);
                 continue;
             }
-
             FreeRtos::delay_ms(1);
         }
     }

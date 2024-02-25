@@ -64,31 +64,34 @@ pub fn start_flight_controllers(
         let time_since_last_reading_seconds =
             (current_time_us - previous_time_us) as f32 / US_IN_SECOND;
 
-        if !drone_on {
-            rotation_mode_flight_controller.reset();
-            if input_values.start {
-                drone_on = true;
-                log::info!("Calibrating gyro");
-                let calibration_values = imu.calculate_drift_average();
-                imu.set_drift_calibration(calibration_values);
-                log::info!("Gyro calibrated");
+        match drone_on {
+            true => {
+                if input_values.kill_motors {
+                    drone_on = false;
+                    controllers_out_callback(FlightStabilizerOutCommands::KillMotors());
+                }
             }
+            false => {
+                rotation_mode_flight_controller.reset();
+                if input_values.start {
+                    drone_on = true;
+                    log::info!("Calibrating gyro");
+                    let calibration_values = imu.calculate_drift_average();
+                    imu.set_drift_calibration(calibration_values);
+                    log::info!("Gyro calibrated");
+                }
 
-            if input_values.calibrate {
-                controllers_out_callback(FlightStabilizerOutCommands::CalibrateMotorController())
-            }
+                if input_values.calibrate {
+                    controllers_out_callback(FlightStabilizerOutCommands::CalibrateMotorController())
+                }
 
-            FreeRtos::delay_ms(5);
-            continue;
-        } else {
-            if input_values.kill_motors {
-                drone_on = false;
-                controllers_out_callback(FlightStabilizerOutCommands::KillMotors());
+                FreeRtos::delay_ms(5);
+                continue;
             }
         }
 
+        
         let throttle: f32 = (input_values.throttle as f32 / u8::max_value() as f32) * MAX_THROTTLE;
-
         let desired_rotation = RotationVector3D {
             pitch: (input_values.pitch as f32 / i16::max_value() as f32) * MAX_INCLINATION,
             roll: (input_values.roll as f32 / i16::max_value() as f32) * MAX_INCLINATION,
@@ -97,6 +100,7 @@ pub fn start_flight_controllers(
 
         let (rotation_rates, acceleration_vector) = imu.get_combined_gyro_accel_output();
         let acceleration_angles = imu.get_roll_pitch_angles(acceleration_vector);
+
         let angle_flight_controller_input = AngleModeControllerInput {
             measured_rotation_rate: RotationVector2D::from(&rotation_rates),
             measured_rotation: acceleration_angles.clone(),
@@ -130,6 +134,7 @@ pub fn start_flight_controllers(
         // telemetry_data_lock.loop_exec_time_us = time_b - time_a;
         telemetry_data_lock.loop_exec_time_us = current_time_us - previous_time_us;
         drop(telemetry_data_lock);
+        
         previous_time_us = current_time_us;
 
         controllers_out_callback(FlightStabilizerOutCommands::UpdateFlightState(

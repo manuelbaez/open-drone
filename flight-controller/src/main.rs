@@ -63,27 +63,8 @@ fn flight_thread(
     };
 
     let mut imu = MPU6050Sensor::new(i2c_driver, gyro_calibration, acceleromenter_calibration);
-    imu.enable_low_pass_filter(LowPassFrequencyValues::Freq10Hz);
     imu.init();
-    // Print telemetry values thread, for debugging/telemetry purposes, later will move this to it's own thread to send to controller.
-    {
-        let telemetry_data = telemetry_data.clone();
-        let _ = std::thread::Builder::new()
-            .stack_size(4096)
-            .spawn(move || loop {
-                let debug_values_lock = telemetry_data.read().unwrap();
-                println!(
-                    " Iteration Time: {:?} \n Rate Out: {:?} \n Angle Out: {:?} \n Motor {:?} \n Throttle {:?}" ,
-                    debug_values_lock.loop_exec_time_us,
-                    debug_values_lock.rate_controller_output,
-                    debug_values_lock.angle_controller_output,
-                    debug_values_lock.motors_power,
-                    debug_values_lock.throttle
-                );
-                drop(debug_values_lock);
-                FreeRtos::delay_ms(1000);
-            });
-    }
+    imu.enable_low_pass_filter(LowPassFrequencyValues::Freq10Hz);
 
     let output_handler = match VEHICLE_TYPE {
         VehicleTypesMapper::Quadcopter => {
@@ -161,6 +142,27 @@ fn main() {
     let control_input_shared = Arc::new(RwLock::new(controller_input_shared));
     let telemetry_data = Arc::new(RwLock::new(TelemetryDataValues::default()));
 
+    // Print telemetry values thread, for debugging/telemetry purposes, later will move this to it's own thread to send to controller.
+    {
+        let telemetry_data = telemetry_data.clone();
+        let _ = std::thread::Builder::new()
+                .stack_size(4096)
+                .spawn(move || loop {
+                    let debug_values_lock = telemetry_data.read().unwrap();
+                    println!(
+                        " Iteration Time: {:?} \n Rotation rate {:?} \n Rate Out: {:?} \n Angle Out: {:?} \n Motor {:?} \n Throttle {:?}" ,
+                        debug_values_lock.loop_exec_time_us,
+                        debug_values_lock.rotation_rate,
+                        debug_values_lock.rate_controller_output,
+                        debug_values_lock.angle_controller_output,
+                        debug_values_lock.motors_power,
+                        debug_values_lock.throttle
+                    );
+                    drop(debug_values_lock);
+                    FreeRtos::delay_ms(1000);
+                });
+    }
+
     let flight_task_name = CString::new("Flight Controller Task").unwrap();
     unsafe {
         xTaskCreatePinnedToCore(
@@ -171,12 +173,12 @@ fn main() {
                 controller_input: control_input_shared.clone(),
                 telemetry_data: telemetry_data.clone(),
             } as *const _ as *mut c_void,
-            10,
+            1,
             std::ptr::null_mut(),
             1,
         )
     };
-    
+
     match CONTROLLER_TYPE {
         ControllerTypes::Wifi => {
             let controller = WifiController::new();

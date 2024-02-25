@@ -30,7 +30,7 @@ impl PID {
         let error = desired_state - measured_state;
         let proportional_output = error * self.proportional_multiplier;
 
-        self.accumulated_error += error * iteration_length;
+        self.accumulated_error += ((error + self.previous_error) * iteration_length) / 2.0;
         let integral_output = self.integral_multiplier * self.accumulated_error;
 
         let change_rate = (error - self.previous_error) / iteration_length;
