@@ -4,13 +4,16 @@ pub struct PID {
     integral_multiplier: f32,
     derivative_multiplier: f32,
     accumulated_error: f32,
+    max_accumulated_error: f32,
 }
 
 impl PID {
+    ///Set max_accumulated_error to zero to not limit integral
     pub fn new(
         proportional_multiplier: f32,
         integral_multiplier: f32,
         derivative_multiplier: f32,
+        max_accumulated_error: f32,
     ) -> Self {
         PID {
             previous_error: 0.0_f32,
@@ -18,6 +21,7 @@ impl PID {
             integral_multiplier,
             derivative_multiplier,
             accumulated_error: 0.0_f32,
+            max_accumulated_error,
         }
     }
 
@@ -31,6 +35,15 @@ impl PID {
         let proportional_output = error * self.proportional_multiplier;
 
         self.accumulated_error += ((error + self.previous_error) * iteration_length) / 2.0;
+
+        if self.accumulated_error > 0.0 {
+            if self.accumulated_error > self.max_accumulated_error {
+                self.accumulated_error = self.max_accumulated_error
+            } else if self.accumulated_error < -self.max_accumulated_error {
+                self.accumulated_error = -self.max_accumulated_error
+            }
+        }
+
         let integral_output = self.integral_multiplier * self.accumulated_error;
 
         let change_rate = (error - self.previous_error) / iteration_length;

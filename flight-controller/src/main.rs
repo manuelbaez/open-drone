@@ -26,7 +26,10 @@ use drivers::mpu_6050::device::MPU6050Sensor;
 use drivers::mpu_6050::registers::LowPassFrequencyValues;
 use esp_idf_svc::hal::delay::FreeRtos;
 use esp_idf_svc::hal::peripherals::Peripherals;
-use esp_idf_svc::sys::{esp_pm_config_t, esp_pm_configure, vTaskDelete, xTaskCreatePinnedToCore};
+use esp_idf_svc::sys::{
+    esp_pm_config_t, esp_pm_configure, esp_pm_lock_acquire, esp_pm_lock_handle_t,
+    esp_pm_lock_type_t_ESP_PM_CPU_FREQ_MAX, vTaskDelete, xTaskCreatePinnedToCore,
+};
 use output::motors_state_manager::QuadcopterMotorsStateManager;
 use output::vehicle_movement_mappers::{
     FlyingVehicleMovementMapper, Quadcopter, VehicleTypesMapper,
@@ -48,6 +51,8 @@ fn flight_thread(
 ) {
     let mut peripherals: Peripherals = Peripherals::take().unwrap();
     let i2c_driver = get_i2c_driver(&mut peripherals);
+    //Wait for the i2c driver to initialize
+    FreeRtos::delay_ms(500);
     let mut motors_manager = QuadcopterMotorsStateManager::new(&mut peripherals);
 
     let acceleromenter_calibration = AccelerationVector3D {
@@ -124,8 +129,10 @@ fn main() {
             min_freq_mhz: 240,
             light_sleep_enable: false,
         };
+
         let config_pointer: *const c_void = &config as *const _ as *const c_void;
         esp_pm_configure(config_pointer);
+        esp_pm_lock_acquire(esp_pm_lock_type_t_ESP_PM_CPU_FREQ_MAX as esp_pm_lock_handle_t);
         log::info!("Set core frequency");
     }
 

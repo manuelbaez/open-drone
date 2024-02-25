@@ -1,5 +1,3 @@
-use std::{thread::sleep, time::Duration};
-
 use crate::util::vectors::{AccelerationVector3D, RotationVector2D, RotationVector3D};
 
 pub trait Accelerometer {
