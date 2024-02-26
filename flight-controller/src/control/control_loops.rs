@@ -6,10 +6,6 @@ use std::{
 use esp_idf_svc::hal::{delay::FreeRtos, i2c::I2cDriver};
 use shared_definitions::controller::ControllerInput;
 
-use crate::drivers::{
-    imu_sensors::{CombinedGyroscopeAccelerometer, Gyroscope},
-    mpu_6050::device::MPU6050Sensor,
-};
 use crate::{
     config::constants::{
         ACCEL_UNCERTAINTY_DEG, GYRO_DRIFT_DEG, MAX_INCLINATION, MAX_ROTATION_RATE, MAX_THROTTLE,
@@ -22,6 +18,13 @@ use crate::{
     TelemetryDataValues,
 };
 use crate::{drivers::imu_sensors::Accelerometer, util::vectors::RotationVector3D};
+use crate::{
+    drivers::{
+        imu_sensors::{CombinedGyroscopeAccelerometer, Gyroscope},
+        mpu_6050::device::MPU6050Sensor,
+    },
+    util::time::get_current_system_time,
+};
 
 const US_IN_SECOND: f32 = 1_000_000.0_f32;
 
@@ -43,8 +46,7 @@ pub fn start_flight_controllers(
     telemetry_data: Arc<RwLock<TelemetryDataValues>>,
     mut controllers_out_callback: impl FnMut(FlightStabilizerOutCommands) -> (),
 ) {
-    let system_time = SystemTime::now();
-    let mut previous_time_us = 0_u128;
+    let mut previous_time_us = 0_i64;
 
     let mut rotation_mode_flight_controller = RotationRateFlightController::new();
     let mut angle_flight_controller =
@@ -53,14 +55,14 @@ pub fn start_flight_controllers(
     let mut drone_on = false;
 
     loop {
-        // let time_a = system_time.elapsed().unwrap().as_micros();
+        // let time_a = get_current_system_time();
         //Read remote control input values
         let input_values_lock = controller_input.read().unwrap(); // This maybe could be improved for performance
         let input_values = input_values_lock.clone();
         drop(input_values_lock);
 
         // Calculate time since last iteration in seconds
-        let current_time_us: u128 = system_time.elapsed().unwrap().as_micros();
+        let current_time_us = get_current_system_time();
         let time_since_last_reading_seconds =
             (current_time_us - previous_time_us) as f32 / US_IN_SECOND;
 
@@ -90,7 +92,6 @@ pub fn start_flight_controllers(
             }
         }
 
-        
         let throttle: f32 = (input_values.throttle as f32 / u8::max_value() as f32) * MAX_THROTTLE;
         let desired_rotation = RotationVector3D {
             pitch: (input_values.pitch as f32 / i16::max_value() as f32) * MAX_INCLINATION,
@@ -130,11 +131,11 @@ pub fn start_flight_controllers(
             angle_flight_controller.get_current_kalman_predicted_state();
         telemetry_data_lock.rotation_rate = rotation_rates.clone();
         telemetry_data_lock.accelerometer_rotation = acceleration_angles.clone();
-        // let time_b = system_time.elapsed().unwrap().as_micros();
+        // let time_b =  get_current_system_time();
         // telemetry_data_lock.loop_exec_time_us = time_b - time_a;
         telemetry_data_lock.loop_exec_time_us = current_time_us - previous_time_us;
         drop(telemetry_data_lock);
-        
+
         previous_time_us = current_time_us;
 
         controllers_out_callback(FlightStabilizerOutCommands::UpdateFlightState(

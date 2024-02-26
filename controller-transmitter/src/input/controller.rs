@@ -14,8 +14,8 @@ pub enum ButtonPressCodes {
 impl TryFrom<u16> for ButtonPressCodes {
     type Error = ();
 
-    fn try_from(v: u16) -> Result<Self, Self::Error> {
-        match v {
+    fn try_from(value: u16) -> Result<Self, Self::Error> {
+        match value {
             x if x == ButtonPressCodes::Y as u16 => Ok(ButtonPressCodes::Y),
             x if x == ButtonPressCodes::B as u16 => Ok(ButtonPressCodes::B),
             x if x == ButtonPressCodes::A as u16 => Ok(ButtonPressCodes::A),
@@ -42,8 +42,8 @@ pub enum AnalogInputCodes {
 impl TryFrom<u16> for AnalogInputCodes {
     type Error = ();
 
-    fn try_from(v: u16) -> Result<Self, Self::Error> {
-        match v {
+    fn try_from(value: u16) -> Result<Self, Self::Error> {
+        match value {
             x if x == AnalogInputCodes::LeftX as u16 => Ok(AnalogInputCodes::LeftX),
             x if x == AnalogInputCodes::LeftY as u16 => Ok(AnalogInputCodes::LeftY),
             x if x == AnalogInputCodes::RightX as u16 => Ok(AnalogInputCodes::RightX),

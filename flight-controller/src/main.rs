@@ -151,6 +151,7 @@ fn main() {
     let control_input_shared = Arc::new(RwLock::new(controller_input_shared));
     let telemetry_data = Arc::new(RwLock::new(TelemetryDataValues::default()));
     let mut peripherals: Peripherals = Peripherals::take().unwrap();
+
     // Print telemetry values thread, for debugging/telemetry purposes, later will move this to it's own thread to send to controller.
     {
         let telemetry_data = telemetry_data.clone();
