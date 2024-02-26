@@ -35,6 +35,7 @@ libm = "0.2.8"
 libwifi = "0.3.1"
 shared-definitions = { path = "../shared-definitions" }
 bitfield-struct = "0.6.0"
+once_cell = "1.19.0"
 
 [build-dependencies]
 embuild = "0.31.3"

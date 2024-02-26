@@ -1,4 +1,4 @@
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 #[repr(C, packed)]
 pub struct ControllerInput {
     pub roll: i16,

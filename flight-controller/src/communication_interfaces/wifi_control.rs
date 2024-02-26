@@ -1,4 +1,8 @@
-use esp_idf_svc::hal::delay::FreeRtos;
+use crate::config::constants::{
+    PAIRING_BSSID_ADDRESS, TRANSMITTER_ADDRESS, WIFI_CONTROLLER_CHANNEL,
+};
+use esp_idf_svc::hal::delay::{FreeRtos, BLOCK};
+use esp_idf_svc::hal::task::queue::Queue;
 use esp_idf_svc::sys::{
     esp_wifi_init, esp_wifi_internal_tx, esp_wifi_set_channel, esp_wifi_set_max_tx_power,
     esp_wifi_set_mode, esp_wifi_set_promiscuous, esp_wifi_set_promiscuous_filter,
@@ -17,6 +21,7 @@ use esp_idf_svc::sys::{
     WIFI_SOFTAP_BEACON_MAX_LEN, WIFI_STATIC_TX_BUFFER_NUM, WIFI_STA_DISCONNECTED_PM_ENABLED,
     WIFI_TASK_CORE_ID,
 };
+use once_cell::sync::Lazy;
 use shared_definitions::{
     controller::ControllerInput,
     wifi::{
@@ -33,10 +38,6 @@ use std::{
     },
 };
 
-use crate::config::constants::{
-    PAIRING_BSSID_ADDRESS, TRANSMITTER_ADDRESS, WIFI_CONTROLLER_CHANNEL,
-};
-
 use super::controller::RemoteControl;
 
 //Had to construct my own struct as I couldn't work with the __IncompleteArrayField<> in wifi_promiscuous_pkt_t
@@ -47,34 +48,12 @@ pub struct WifiPromiscousPacket {
     pub payload: GenericWifiPacketFrameHeader,
 }
 
-pub static CONTROLLER_INPUT_DATA: RwLock<ControllerInput> = RwLock::new(ControllerInput {
-    yaw: 0,
-    pitch: 0,
-    roll: 0,
-    throttle: 0,
-    kill_motors: false,
-    start: false,
-    calibrate: false,
-});
-pub static DATA_READY_LOCK: AtomicBool = AtomicBool::new(false);
+pub static CONTROLLER_INPUT_QUEUE: Lazy<Queue<ControllerInput>> =
+    Lazy::new(|| Queue::new(mem::size_of::<ControllerInput>()));
 
 pub struct WifiController;
 
 impl WifiController {
-    fn handle_controller_input(input: ControllerInput) {
-        let mut input_data_lock = CONTROLLER_INPUT_DATA.write().unwrap();
-
-        input_data_lock.kill_motors = input.kill_motors;
-        input_data_lock.start = input.start;
-        input_data_lock.roll = input.roll;
-        input_data_lock.pitch = input.pitch;
-        input_data_lock.yaw = input.yaw;
-        input_data_lock.throttle = input.throttle;
-        input_data_lock.calibrate = input.calibrate;
-        DATA_READY_LOCK.store(true, Ordering::Release);
-        drop(input_data_lock);
-    }
-
     unsafe extern "C" fn sniffer(buffer: *mut c_void, _packet_type: wifi_promiscuous_pkt_type_t) {
         // if packet_type == wifi_promiscuous_pkt_type_t_WIFI_PKT_DATA {
         let packet_pointer = buffer as *const WifiPromiscousPacket;
@@ -107,9 +86,10 @@ impl WifiController {
                     parsed_packet_buffer.clone_from_slice(&wifi_frame_data[..parsed_packet_size]);
 
                     let data = parsed_packet.data;
-                    Self::handle_controller_input(data);
-
-                    // log::info!("Packet {:02x?}", frame_control);
+                    let result = CONTROLLER_INPUT_QUEUE.send_back(data, 0);
+                    if !result.is_err() {
+                        result.unwrap();
+                    }
                 }
             }
         }
@@ -171,25 +151,23 @@ impl RemoteControl for WifiController {
             // esp_wifi_80211_tx(wifi_interface_t_WIFI_IF_NAN, buffer, len, en_sys_seq);
             // esp_wifi_internal_tx(wifi_if, buffer, len)
         }
-
         loop {
-            let ready = DATA_READY_LOCK.load(Ordering::Acquire);
-            if ready {
-                let intermediate_input_lock = CONTROLLER_INPUT_DATA.read().unwrap();
-                let mut shared_controller_input_lock = shared_controller_input.write().unwrap();
-                shared_controller_input_lock.kill_motors = intermediate_input_lock.kill_motors;
-                shared_controller_input_lock.start = intermediate_input_lock.start;
-                shared_controller_input_lock.calibrate = intermediate_input_lock.calibrate;
-                shared_controller_input_lock.roll = intermediate_input_lock.roll;
-                shared_controller_input_lock.pitch = intermediate_input_lock.pitch;
-                shared_controller_input_lock.yaw = intermediate_input_lock.yaw;
-                shared_controller_input_lock.throttle = intermediate_input_lock.throttle;
-                drop(shared_controller_input_lock);
-                drop(intermediate_input_lock);
-                DATA_READY_LOCK.store(false, Ordering::Release);
-                continue;
+            let data = CONTROLLER_INPUT_QUEUE.recv_front(BLOCK);
+
+            match data {
+                Some((data, _)) => {
+                    let mut shared_controller_input_lock = shared_controller_input.write().unwrap();
+                    shared_controller_input_lock.kill_motors = data.kill_motors;
+                    shared_controller_input_lock.start = data.start;
+                    shared_controller_input_lock.calibrate = data.calibrate;
+                    shared_controller_input_lock.roll = data.roll;
+                    shared_controller_input_lock.pitch = data.pitch;
+                    shared_controller_input_lock.yaw = data.yaw;
+                    shared_controller_input_lock.throttle = data.throttle;
+                    drop(shared_controller_input_lock);
+                }
+                _ => {}
             }
-            FreeRtos::delay_ms(1);
         }
     }
 }

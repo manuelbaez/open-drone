@@ -11,3 +11,4 @@ CONFIG_FREERTOS_HZ=2000
 
 #Disable task watchdog to utilize 100% cpu for flight thread
 CONFIG_ESP_TASK_WDT_CHECK_IDLE_TASK_CPU1=n
+CONFIG_ESP32_DEFAULT_CPU_FREQ_MHZ=240

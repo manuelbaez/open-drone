@@ -40,20 +40,21 @@ use std::sync::{Arc, RwLock};
 use telemetry::TelemetryDataValues;
 use util::vectors::{AccelerationVector3D, RotationVector3D};
 
-struct FlightThreadInput {
+struct FlightThreadInput<'a> {
     controller_input: Arc<RwLock<ControllerInput>>,
     telemetry_data: Arc<RwLock<TelemetryDataValues>>,
+    peripherals: &'a mut Peripherals,
 }
 
 fn flight_thread(
     controller_input: Arc<RwLock<ControllerInput>>,
     telemetry_data: Arc<RwLock<TelemetryDataValues>>,
+    peripherals: &mut Peripherals,
 ) {
-    let mut peripherals: Peripherals = Peripherals::take().unwrap();
-    let i2c_driver = get_i2c_driver(&mut peripherals);
+    let i2c_driver = get_i2c_driver(peripherals);
     //Wait for the i2c driver to initialize
     FreeRtos::delay_ms(500);
-    let mut motors_manager = QuadcopterMotorsStateManager::new(&mut peripherals);
+    let mut motors_manager = QuadcopterMotorsStateManager::new(peripherals);
 
     let acceleromenter_calibration = AccelerationVector3D {
         x: ACCEL_X_DEVIATION,
@@ -113,6 +114,7 @@ unsafe extern "C" fn flight_thread_task_entrypoint(params: *mut core::ffi::c_voi
     flight_thread(
         controller_input_shared.controller_input,
         controller_input_shared.telemetry_data,
+        controller_input_shared.peripherals,
     );
     vTaskDelete(std::ptr::null_mut());
 }
@@ -148,7 +150,7 @@ fn main() {
 
     let control_input_shared = Arc::new(RwLock::new(controller_input_shared));
     let telemetry_data = Arc::new(RwLock::new(TelemetryDataValues::default()));
-
+    let mut peripherals: Peripherals = Peripherals::take().unwrap();
     // Print telemetry values thread, for debugging/telemetry purposes, later will move this to it's own thread to send to controller.
     {
         let telemetry_data = telemetry_data.clone();
@@ -179,6 +181,7 @@ fn main() {
             &FlightThreadInput {
                 controller_input: control_input_shared.clone(),
                 telemetry_data: telemetry_data.clone(),
+                peripherals: &mut peripherals,
             } as *const _ as *mut c_void,
             1,
             std::ptr::null_mut(),
@@ -192,7 +195,7 @@ fn main() {
             controller.start_changes_monitor(control_input_shared)
         }
         ControllerTypes::Ibus => {
-            let controller = IBusController::new();
+            let controller = IBusController::new(&mut peripherals);
             controller.start_changes_monitor(control_input_shared)
         }
     };
