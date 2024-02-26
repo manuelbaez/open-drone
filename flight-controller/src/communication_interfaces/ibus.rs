@@ -37,6 +37,7 @@ enum ChannelMappings {
     Yaw,
     Throttle,
     PowerOn,
+    CalibrateSensors,
 }
 
 impl TryFrom<u8> for ChannelMappings {
@@ -49,6 +50,7 @@ impl TryFrom<u8> for ChannelMappings {
             3 => Ok(ChannelMappings::Throttle),
             4 => Ok(ChannelMappings::Yaw),
             7 => Ok(ChannelMappings::PowerOn),
+            8 => Ok(ChannelMappings::CalibrateSensors),
             _ => Ok(ChannelMappings::Unused),
         }
     }
@@ -107,8 +109,8 @@ impl<'a> IBusController<'a> {
         for (index, data) in channels.into_iter().enumerate() {
             let channel: ChannelMappings = ChannelMappings::try_from((index + 1) as u8).unwrap();
             match channel {
-                ChannelMappings::Pitch => input_values.pitch = - Self::map_to_i16_range(data),
-                ChannelMappings::Roll => input_values.roll =  Self::map_to_i16_range(data),
+                ChannelMappings::Pitch => input_values.pitch = -Self::map_to_i16_range(data),
+                ChannelMappings::Roll => input_values.roll = Self::map_to_i16_range(data),
                 ChannelMappings::Yaw => input_values.yaw = Self::map_to_i16_range(data),
                 ChannelMappings::Throttle => input_values.throttle = Self::map_to_u8_range(data),
                 ChannelMappings::PowerOn => {
@@ -116,13 +118,17 @@ impl<'a> IBusController<'a> {
                     input_values.start = value;
                     input_values.kill_motors = !value;
                 }
+                ChannelMappings::CalibrateSensors => {
+                    input_values.calibrate_sensors = Self::map_to_boolean(data);
+                }
                 _ => (),
             }
         }
         let mut input_write_lock = shared_controller_input.write().unwrap();
         input_write_lock.kill_motors = input_values.kill_motors;
         input_write_lock.start = input_values.start;
-        input_write_lock.calibrate = input_values.calibrate;
+        input_write_lock.calibrate_esc = input_values.calibrate_esc;
+        input_write_lock.calibrate_sensors = input_values.calibrate_sensors;
         input_write_lock.roll = input_values.roll;
         input_write_lock.pitch = input_values.pitch;
         input_write_lock.yaw = input_values.yaw;

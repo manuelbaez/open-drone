@@ -18,6 +18,27 @@ impl Sub<AccelerationVector3D> for AccelerationVector3D {
         }
     }
 }
+
+impl AddAssign<AccelerationVector3D> for AccelerationVector3D {
+    fn add_assign(&mut self, rhs: AccelerationVector3D) {
+        self.x += rhs.x;
+        self.y += rhs.y;
+        self.z += rhs.z;
+    }
+}
+
+impl Div<f32> for AccelerationVector3D {
+    type Output = AccelerationVector3D;
+
+    fn div(self, rhs: f32) -> Self::Output {
+        Self {
+            x: self.x / rhs,
+            y: self.y / rhs,
+            z: self.z / rhs,
+        }
+    }
+}
+
 #[derive(Debug, Default)]
 pub struct RotationVector3D {
     pub pitch: f32,

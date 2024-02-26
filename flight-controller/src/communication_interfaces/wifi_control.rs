@@ -32,16 +32,12 @@ use shared_definitions::{
 use std::{
     ffi::c_void,
     mem,
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc, RwLock,
-    },
+    sync::{Arc, RwLock},
 };
 
 use super::controller::RemoteControl;
 
-//Had to construct my own struct as I couldn't work with the __IncompleteArrayField<> in wifi_promiscuous_pkt_t
-// #[derive(Debug, Default)]
+///Had to construct my own struct as I couldn't work with the __IncompleteArrayField<> in wifi_promiscuous_pkt_t
 #[repr(C)]
 pub struct WifiPromiscousPacket {
     pub rx_ctrl: wifi_pkt_rx_ctrl_t,
@@ -159,7 +155,8 @@ impl RemoteControl for WifiController {
                     let mut shared_controller_input_lock = shared_controller_input.write().unwrap();
                     shared_controller_input_lock.kill_motors = data.kill_motors;
                     shared_controller_input_lock.start = data.start;
-                    shared_controller_input_lock.calibrate = data.calibrate;
+                    shared_controller_input_lock.calibrate_esc = data.calibrate_esc;
+                    shared_controller_input_lock.calibrate_sensors = data.calibrate_sensors;
                     shared_controller_input_lock.roll = data.roll;
                     shared_controller_input_lock.pitch = data.pitch;
                     shared_controller_input_lock.yaw = data.yaw;

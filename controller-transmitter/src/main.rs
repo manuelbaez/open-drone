@@ -4,7 +4,15 @@ extern crate rawsock;
 use std::{mem, thread::sleep, time::Duration};
 
 use pcap::Device;
-use shared_definitions::{controller::ControllerInput, wifi::{builders::{build_ibss_broadcast_data_frame, build_radiotap}, ieee80211_frames::{IBSSWifiPacketFrame, MacAddr}, payloads::CustomSAPs, radiotap::{DataRate, RadiotapPacket}}};
+use shared_definitions::{
+    controller::ControllerInput,
+    wifi::{
+        builders::{build_ibss_broadcast_data_frame, build_radiotap},
+        ieee80211_frames::{IBSSWifiPacketFrame, MacAddr},
+        payloads::CustomSAPs,
+        radiotap::{DataRate, RadiotapPacket},
+    },
+};
 
 use crate::input::ControlInputMapper;
 
@@ -40,7 +48,8 @@ fn main() {
             yaw: current_input.yaw,
             start: current_input.start_motors,
             kill_motors: current_input.kill_motors,
-            calibrate: current_input.calibrate,
+            calibrate_esc: current_input.calibrate,
+            calibrate_sensors: false,
         };
 
         let wifi_frame = build_ibss_broadcast_data_frame(

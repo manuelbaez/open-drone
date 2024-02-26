@@ -145,12 +145,9 @@ where
     }
 
     fn map_accel_out_to_vector(&self, accel_data: Mpu6050AccelRegOut) -> AccelerationVector3D {
-        let x = (accel_data.x as f32 / self.accel_sensitivity.sensitvity as f32)
-            - self.accelerometer_calibration.x;
-        let y = (accel_data.y as f32 / self.accel_sensitivity.sensitvity as f32)
-            - self.accelerometer_calibration.y;
-        let z = (accel_data.z as f32 / self.accel_sensitivity.sensitvity as f32)
-            - self.accelerometer_calibration.z;
+        let x = accel_data.x as f32 / self.accel_sensitivity.sensitvity as f32;
+        let y = accel_data.y as f32 / self.accel_sensitivity.sensitvity as f32;
+        let z = accel_data.z as f32 / self.accel_sensitivity.sensitvity as f32;
 
         AccelerationVector3D { x, y, z }
     }
@@ -170,9 +167,13 @@ impl<I> Accelerometer for MPU6050Sensor<I>
 where
     I: I2cGenericDriver,
 {
-    fn get_acceleration_vector(&mut self) -> AccelerationVector3D {
+    fn get_acceleration_vector_uncalibrated(&mut self) -> AccelerationVector3D {
         let acc_values = self.get_accel_data();
         self.map_accel_out_to_vector(acc_values)
+    }
+
+    fn get_acceleration_vector(&mut self) -> AccelerationVector3D {
+        self.get_acceleration_vector_uncalibrated() - self.accelerometer_calibration.clone()
     }
 
     fn get_roll_pitch_angles(
@@ -193,6 +194,10 @@ where
             roll: roll.to_degrees(),
             pitch: pitch.to_degrees(),
         }
+    }
+
+    fn set_deviation_calibration(&mut self, claibration: AccelerationVector3D) {
+        self.accelerometer_calibration = claibration;
     }
 }
 

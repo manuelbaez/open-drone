@@ -1,6 +1,6 @@
-use crate::util::vectors::{RotationVector2D, RotationVector3D};
+use crate::util::vectors::{AccelerationVector3D, RotationVector2D, RotationVector3D};
 
-#[derive(Default, Debug)]
+#[derive(Default, Debug, Clone)]
 pub struct TelemetryDataValues {
     pub loop_exec_time_us: i64,
     pub rate_controller_output: RotationVector3D,

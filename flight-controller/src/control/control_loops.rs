@@ -1,7 +1,4 @@
-use std::{
-    sync::{Arc, RwLock},
-    time::SystemTime,
-};
+use std::sync::{Arc, RwLock};
 
 use esp_idf_svc::hal::{delay::FreeRtos, i2c::I2cDriver};
 use shared_definitions::controller::ControllerInput;
@@ -55,9 +52,8 @@ pub fn start_flight_controllers(
     let mut drone_on = false;
 
     loop {
-        // let time_a = get_current_system_time();
         //Read remote control input values
-        let input_values_lock = controller_input.read().unwrap(); // This maybe could be improved for performance
+        let input_values_lock = controller_input.read().unwrap(); // This maybe could be improved for performance, don't know how though lol
         let input_values = input_values_lock.clone();
         drop(input_values_lock);
 
@@ -77,14 +73,22 @@ pub fn start_flight_controllers(
                 rotation_mode_flight_controller.reset();
                 if input_values.start {
                     drone_on = true;
+                }
+
+                if input_values.calibrate_esc {
+                    controllers_out_callback(FlightStabilizerOutCommands::CalibrateMotorController())
+                }
+
+                if input_values.calibrate_sensors {
                     log::info!("Calibrating gyro");
                     let calibration_values = imu.calculate_drift_average();
                     imu.set_drift_calibration(calibration_values);
                     log::info!("Gyro calibrated");
-                }
 
-                if input_values.calibrate {
-                    controllers_out_callback(FlightStabilizerOutCommands::CalibrateMotorController())
+                    log::info!("Calibrating Accelerometer");
+                    let calibration_values = imu.calculate_deviation_average();
+                    imu.set_deviation_calibration(calibration_values);
+                    log::info!("Accelerometer calibrated");
                 }
 
                 FreeRtos::delay_ms(5);
@@ -131,8 +135,6 @@ pub fn start_flight_controllers(
             angle_flight_controller.get_current_kalman_predicted_state();
         telemetry_data_lock.rotation_rate = rotation_rates.clone();
         telemetry_data_lock.accelerometer_rotation = acceleration_angles.clone();
-        // let time_b =  get_current_system_time();
-        // telemetry_data_lock.loop_exec_time_us = time_b - time_a;
         telemetry_data_lock.loop_exec_time_us = current_time_us - previous_time_us;
         drop(telemetry_data_lock);
 

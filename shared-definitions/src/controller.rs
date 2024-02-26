@@ -7,5 +7,6 @@ pub struct ControllerInput {
     pub throttle: u8,
     pub kill_motors: bool,
     pub start: bool,
-    pub calibrate: bool,
+    pub calibrate_esc: bool,
+    pub calibrate_sensors: bool,
 }
