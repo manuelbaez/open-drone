@@ -5,6 +5,7 @@ mod communication_interfaces;
 mod control;
 mod drivers;
 mod output;
+mod shared_core_values;
 mod telemetry;
 mod util;
 pub mod config {
@@ -17,6 +18,7 @@ use crate::communication_interfaces::wifi_control::WifiController;
 use crate::communication_interfaces::{i2c::*, ControllerTypes};
 use crate::config::constants::CONTROLLER_TYPE;
 use crate::control::control_loops::start_flight_controllers;
+use crate::shared_core_values::{INPUT_SHARED, TELEMETRY_SHARED};
 use config::constants::{
     ACCEL_X_DEVIATION, ACCEL_Y_DEVIATION, ACCEL_Z_DEVIATION, GYRO_PITCH_CALIBRATION_DEG,
     GYRO_ROLL_CALIBRATION_DEG, GYRO_YAW_CALIBRATION_DEG, MAX_POWER_OVER_THROTTLE, MIN_POWER,
@@ -35,21 +37,23 @@ use output::motors_state_manager::QuadcopterMotorsStateManager;
 use output::vehicle_movement_mappers::{
     FlyingVehicleMovementMapper, Quadcopter, VehicleTypesMapper,
 };
+use shared_core_values::{AtomicControllerInput, AtomicTelemetry};
 use shared_definitions::controller::ControllerInput;
 use std::ffi::{c_void, CString};
+use std::sync::atomic::Ordering;
 use std::sync::{Arc, RwLock};
 use telemetry::TelemetryDataValues;
 use util::vectors::{AccelerationVector3D, RotationVector3D};
 
 struct FlightThreadInput<'a> {
-    controller_input: Arc<RwLock<ControllerInput>>,
-    telemetry_data: Arc<RwLock<TelemetryDataValues>>,
+    controller_input: &'a AtomicControllerInput,
+    telemetry_data: &'a AtomicTelemetry,
     peripherals: &'a mut Peripherals,
 }
 
 fn flight_thread(
-    controller_input: Arc<RwLock<ControllerInput>>,
-    telemetry_data: Arc<RwLock<TelemetryDataValues>>,
+    controller_input: &AtomicControllerInput,
+    telemetry_data: &AtomicTelemetry,
     peripherals: &mut Peripherals,
 ) {
     let i2c_driver = get_i2c_driver(peripherals);
@@ -71,12 +75,12 @@ fn flight_thread(
 
     let mut imu = MPU6050Sensor::new(i2c_driver, gyro_calibration, acceleromenter_calibration);
     imu.enable_low_pass_filter(LowPassFrequencyValues::Freq10Hz);
+    FreeRtos::delay_ms(1000);
     imu.init();
 
     let output_handler = match VEHICLE_TYPE {
         VehicleTypesMapper::Quadcopter => {
             let quadcoper_movement_mapper = Quadcopter::new(MIN_POWER, MAX_POWER_OVER_THROTTLE);
-            let telemetry_data = telemetry_data.clone();
             move |result| match result {
                 FlightStabilizerOutCommands::KillMotors() => motors_manager.kill_motors(),
                 FlightStabilizerOutCommands::BypassThrottle(throttle) => {
@@ -88,7 +92,6 @@ fn flight_thread(
                             state.throttle,
                             state.rotation_output_command,
                         );
-                    let mut telemetry_data_lock = telemetry_data.write().unwrap();
                     let mapped_to_motors_numbers = [
                         quad_out.motor_rear_left,
                         quad_out.motor_rear_right,
@@ -96,11 +99,19 @@ fn flight_thread(
                         quad_out.motor_front_right,
                     ];
 
-                    telemetry_data_lock
-                        .motors_power
-                        .copy_from_slice(&mapped_to_motors_numbers);
-                    telemetry_data_lock.throttle = state.throttle;
-                    drop(telemetry_data_lock);
+                    telemetry_data
+                        .motor_1_power
+                        .store(mapped_to_motors_numbers[0] as u8, Ordering::Release);
+                    telemetry_data
+                        .motor_2_power
+                        .store(mapped_to_motors_numbers[1] as u8, Ordering::Release);
+                    telemetry_data
+                        .motor_3_power
+                        .store(mapped_to_motors_numbers[2] as u8, Ordering::Release);
+                    telemetry_data
+                        .motor_4_power
+                        .store(mapped_to_motors_numbers[3] as u8, Ordering::Release);
+
                     motors_manager.set_motor_power(mapped_to_motors_numbers);
                 }
             }
@@ -140,37 +151,30 @@ fn main() {
         log::info!("Set core frequency");
     }
 
-    let controller_input_shared = ControllerInput::default();
-
-    let control_input_shared = Arc::new(RwLock::new(controller_input_shared));
-    let telemetry_data = Arc::new(RwLock::new(TelemetryDataValues::default()));
     let mut peripherals: Peripherals = Peripherals::take().unwrap();
 
     // Print telemetry values thread, for debugging/telemetry purposes, later will move this to it's own thread to send to controller.
     {
-        let telemetry_data = telemetry_data.clone();
+        let telemetry_data = &TELEMETRY_SHARED;
         let _ = std::thread::Builder::new()
             .stack_size(4096)
             .spawn(move || loop {
-                let debug_values_lock = telemetry_data.read().unwrap();
                 println!(
-                    " Iteration Time: {:?} 
-                    Rotation rate {:?} 
-                    Rate Out: {:?}
-                    Angle Out: {:?} 
-                    Motor {:?} 
-                    Throttle {:?} 
-                    Rotation Accelerometer {:?}",
-                    debug_values_lock.loop_exec_time_us,
-                    debug_values_lock.rotation_rate,
-                    debug_values_lock.rate_controller_output,
-                    debug_values_lock.angle_controller_output,
-                    debug_values_lock.motors_power,
-                    debug_values_lock.throttle,
-                    debug_values_lock.accelerometer_rotation
+                    " Iteration Time: {:?}
+                    Rotation rate {:?}
+                    Motor {:?}
+                    Throttle {:?}",
+                    telemetry_data.loop_exec_time_us.load(Ordering::Relaxed),
+                    telemetry_data.rotation_rate.read(),
+                    [
+                        telemetry_data.motor_1_power.load(Ordering::Relaxed),
+                        telemetry_data.motor_2_power.load(Ordering::Relaxed),
+                        telemetry_data.motor_3_power.load(Ordering::Relaxed),
+                        telemetry_data.motor_4_power.load(Ordering::Relaxed)
+                    ],
+                    telemetry_data.throttle.load(Ordering::Relaxed),
                 );
-                drop(debug_values_lock);
-                FreeRtos::delay_ms(1000);
+                FreeRtos::delay_ms(250);
             });
     }
 
@@ -181,8 +185,8 @@ fn main() {
             flight_task_name.as_ptr(),
             4096,
             &FlightThreadInput {
-                controller_input: control_input_shared.clone(),
-                telemetry_data: telemetry_data.clone(),
+                controller_input: &INPUT_SHARED,
+                telemetry_data: &TELEMETRY_SHARED,
                 peripherals: &mut peripherals,
             } as *const _ as *mut c_void,
             1,
@@ -194,11 +198,11 @@ fn main() {
     match CONTROLLER_TYPE {
         ControllerTypes::Wifi => {
             let controller = WifiController::new();
-            controller.start_changes_monitor(control_input_shared)
+            controller.start_changes_monitor(&INPUT_SHARED)
         }
         ControllerTypes::Ibus => {
             let controller = IBusController::new(&mut peripherals);
-            controller.start_changes_monitor(control_input_shared)
+            controller.start_changes_monitor(&INPUT_SHARED)
         }
     };
 }

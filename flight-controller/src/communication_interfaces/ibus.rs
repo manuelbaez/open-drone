@@ -1,3 +1,6 @@
+use super::controller::RemoteControl;
+use crate::shared_core_values::AtomicControllerInput;
+use crate::util::time::get_current_system_time;
 use esp_idf_svc::hal::delay::BLOCK;
 use esp_idf_svc::hal::peripheral::Peripheral;
 use esp_idf_svc::hal::prelude::*;
@@ -7,11 +10,7 @@ use esp_idf_svc::hal::{
     uart::{config, UartDriver},
 };
 use shared_definitions::controller::ControllerInput;
-use std::sync::{Arc, RwLock};
-
-use crate::util::time::get_current_system_time;
-
-use super::controller::RemoteControl;
+use std::sync::atomic::Ordering;
 
 const PROTOCOL_MESSAGE_TIMEGAP_US: i64 = 3500;
 const PROTOCOL_SIZE: usize = 0x20;
@@ -104,7 +103,7 @@ impl<'a> IBusController<'a> {
 
     fn process_ibus_message(
         data: [u8; PROTOCOL_SIZE],
-        shared_controller_input: &Arc<RwLock<ControllerInput>>,
+        shared_controller_input: &AtomicControllerInput,
     ) {
         let channels = Self::map_data_to_channels(data);
         let mut input_values = ControllerInput::default();
@@ -129,21 +128,36 @@ impl<'a> IBusController<'a> {
                 _ => (),
             }
         }
-        let mut input_write_lock = shared_controller_input.write().unwrap();
-        input_write_lock.kill_motors = input_values.kill_motors;
-        input_write_lock.start = input_values.start;
-        input_write_lock.calibrate_esc = input_values.calibrate_esc;
-        input_write_lock.calibrate_sensors = input_values.calibrate_sensors;
-        input_write_lock.roll = input_values.roll;
-        input_write_lock.pitch = input_values.pitch;
-        input_write_lock.yaw = input_values.yaw;
-        input_write_lock.throttle = input_values.throttle;
-        drop(input_write_lock);
+
+        shared_controller_input
+            .roll
+            .store(input_values.roll, Ordering::Release);
+        shared_controller_input
+            .pitch
+            .store(input_values.pitch, Ordering::Release);
+        shared_controller_input
+            .yaw
+            .store(input_values.yaw, Ordering::Release);
+        shared_controller_input
+            .throttle
+            .store(input_values.throttle, Ordering::Release);
+        shared_controller_input
+            .kill_motors
+            .store(input_values.kill_motors, Ordering::Release);
+        shared_controller_input
+            .start
+            .store(input_values.start, Ordering::Release);
+        shared_controller_input
+            .calibrate_esc
+            .store(input_values.calibrate_esc, Ordering::Release);
+        shared_controller_input
+            .calibrate_sensors
+            .store(input_values.calibrate_sensors, Ordering::Release);
     }
 }
 
 impl<'a> RemoteControl for IBusController<'a> {
-    fn start_changes_monitor(&self, shared_controller_input: Arc<RwLock<ControllerInput>>) {
+    fn start_changes_monitor(&self, shared_controller_input: &AtomicControllerInput) {
         let mut data_buffer = [0_u8; PROTOCOL_SIZE];
         let mut current_byte_count = 0_u8;
         let mut current_message_length = 0_u8;
@@ -196,7 +210,7 @@ impl<'a> RemoteControl for IBusController<'a> {
                     if target_checksum == checksum {
                         match data_buffer[0] {
                             PROTOCOL_COMMAND40 => {
-                                Self::process_ibus_message(data_buffer, &shared_controller_input);
+                                Self::process_ibus_message(data_buffer, shared_controller_input);
                             }
                             _ => (),
                         }
