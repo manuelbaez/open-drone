@@ -45,7 +45,7 @@ impl QuadcopterMotorsStateManager {
     }
 
     pub fn kill_motors(&mut self) {
+        self.set_motor_power([0.0, 0.0, 0.0, 0.0]);
         log::info!("Killed motors");
-        self.set_motor_power([0.0; 4]);
     }
 }

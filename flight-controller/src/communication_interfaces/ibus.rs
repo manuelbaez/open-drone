@@ -38,6 +38,7 @@ enum ChannelMappings {
     Throttle,
     PowerOn,
     CalibrateSensors,
+    CalibrateESC,
 }
 
 impl TryFrom<u8> for ChannelMappings {
@@ -51,6 +52,7 @@ impl TryFrom<u8> for ChannelMappings {
             4 => Ok(ChannelMappings::Yaw),
             7 => Ok(ChannelMappings::PowerOn),
             8 => Ok(ChannelMappings::CalibrateSensors),
+            10 => Ok(ChannelMappings::CalibrateESC),
             _ => Ok(ChannelMappings::Unused),
         }
     }
@@ -120,6 +122,9 @@ impl<'a> IBusController<'a> {
                 }
                 ChannelMappings::CalibrateSensors => {
                     input_values.calibrate_sensors = Self::map_to_boolean(data);
+                }
+                ChannelMappings::CalibrateESC => {
+                    input_values.calibrate_esc = Self::map_to_boolean(data);
                 }
                 _ => (),
             }

@@ -19,7 +19,8 @@ use crate::config::constants::CONTROLLER_TYPE;
 use crate::control::control_loops::start_flight_controllers;
 use config::constants::{
     ACCEL_X_DEVIATION, ACCEL_Y_DEVIATION, ACCEL_Z_DEVIATION, GYRO_PITCH_CALIBRATION_DEG,
-    GYRO_ROLL_CALIBRATION_DEG, GYRO_YAW_CALIBRATION_DEG, MAX_POWER, MIN_POWER, VEHICLE_TYPE,
+    GYRO_ROLL_CALIBRATION_DEG, GYRO_YAW_CALIBRATION_DEG, MAX_POWER_OVER_THROTTLE, MIN_POWER,
+    VEHICLE_TYPE,
 };
 use control::control_loops::FlightStabilizerOutCommands;
 use drivers::mpu_6050::device::MPU6050Sensor;
@@ -69,18 +70,18 @@ fn flight_thread(
     };
 
     let mut imu = MPU6050Sensor::new(i2c_driver, gyro_calibration, acceleromenter_calibration);
-    imu.init();
     imu.enable_low_pass_filter(LowPassFrequencyValues::Freq10Hz);
+    imu.init();
 
     let output_handler = match VEHICLE_TYPE {
         VehicleTypesMapper::Quadcopter => {
-            let quadcoper_movement_mapper = Quadcopter::new(MIN_POWER, MAX_POWER);
+            let quadcoper_movement_mapper = Quadcopter::new(MIN_POWER, MAX_POWER_OVER_THROTTLE);
             let telemetry_data = telemetry_data.clone();
             move |result| match result {
-                FlightStabilizerOutCommands::CalibrateMotorController() => {
-                    motors_manager.calibrate_esc();
-                }
                 FlightStabilizerOutCommands::KillMotors() => motors_manager.kill_motors(),
+                FlightStabilizerOutCommands::BypassThrottle(throttle) => {
+                    motors_manager.set_motor_power([throttle; 4]);
+                }
                 FlightStabilizerOutCommands::UpdateFlightState(state) => {
                     let quad_out = quadcoper_movement_mapper
                         .map_controller_output_to_actuators_input(
@@ -94,6 +95,7 @@ fn flight_thread(
                         quad_out.motor_front_left,
                         quad_out.motor_front_right,
                     ];
+
                     telemetry_data_lock
                         .motors_power
                         .copy_from_slice(&mapped_to_motors_numbers);

@@ -26,9 +26,9 @@ use crate::{
 const US_IN_SECOND: f32 = 1_000_000.0_f32;
 
 pub enum FlightStabilizerOutCommands {
-    CalibrateMotorController(),
     KillMotors(),
     UpdateFlightState(FlightStabilizerOut),
+    BypassThrottle(f32),
 }
 
 #[derive(Debug)]
@@ -57,16 +57,13 @@ pub fn start_flight_controllers(
         let input_values = input_values_lock.clone();
         drop(input_values_lock);
 
-        // Calculate time since last iteration in seconds
-        let current_time_us = get_current_system_time();
-        let time_since_last_reading_seconds =
-            (current_time_us - previous_time_us) as f32 / US_IN_SECOND;
-
+        let throttle: f32 = (input_values.throttle as f32 / u8::max_value() as f32) * MAX_THROTTLE;
         match drone_on {
             true => {
                 if input_values.kill_motors {
                     drone_on = false;
                     controllers_out_callback(FlightStabilizerOutCommands::KillMotors());
+                    continue;
                 }
             }
             false => {
@@ -76,7 +73,7 @@ pub fn start_flight_controllers(
                 }
 
                 if input_values.calibrate_esc {
-                    controllers_out_callback(FlightStabilizerOutCommands::CalibrateMotorController())
+                    controllers_out_callback(FlightStabilizerOutCommands::BypassThrottle(throttle))
                 }
 
                 if input_values.calibrate_sensors {
@@ -96,7 +93,11 @@ pub fn start_flight_controllers(
             }
         }
 
-        let throttle: f32 = (input_values.throttle as f32 / u8::max_value() as f32) * MAX_THROTTLE;
+        // Calculate time since last iteration in seconds
+        let current_time_us = get_current_system_time();
+        let time_since_last_reading_seconds =
+            (current_time_us - previous_time_us) as f32 / US_IN_SECOND;
+
         let desired_rotation = RotationVector3D {
             pitch: (input_values.pitch as f32 / i16::max_value() as f32) * MAX_INCLINATION,
             roll: (input_values.roll as f32 / i16::max_value() as f32) * MAX_INCLINATION,

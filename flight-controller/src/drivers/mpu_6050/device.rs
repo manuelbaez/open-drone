@@ -43,7 +43,7 @@ where
         gyro_drift_calibration: RotationVector3D,
         accelerometer_calibration: AccelerationVector3D,
     ) -> Self {
-        FreeRtos::delay_ms(100);
+        FreeRtos::delay_ms(500);// If I don't wait here the app crashes on release
         MPU6050Sensor {
             i2c_driver,
             gyro_drift_calibration,
@@ -64,8 +64,12 @@ where
     }
 
     pub fn enable_low_pass_filter(&mut self, low_pass_freq: LowPassFrequencyValues) {
+        let reg_value = match low_pass_freq {
+            LowPassFrequencyValues::Freq10Hz => 0x5_u8,
+            LowPassFrequencyValues::Freq21Hz => 0x4_u8,
+        };
         self.i2c_driver
-            .write(self.mpu_addr, &[MPURegisters::CONFIG, low_pass_freq as u8])
+            .write(self.mpu_addr, &[MPURegisters::CONFIG, reg_value])
             .unwrap(); //Set to 10hz
         FreeRtos::delay_ms(100);
     }
