@@ -139,6 +139,7 @@ impl AngleModeFlightController {
         }
     }
 
+    #[allow(dead_code)]
     pub fn get_current_kalman_predicted_state(&self) -> RotationVector2D {
         RotationVector2D {
             roll: self.roll_kalman_filter.get_current_state(),

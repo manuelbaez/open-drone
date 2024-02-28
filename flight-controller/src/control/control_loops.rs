@@ -1,4 +1,4 @@
-use std::sync::{atomic::Ordering, Arc, RwLock};
+use std::sync::atomic::Ordering;
 
 use esp_idf_svc::hal::{delay::FreeRtos, i2c::I2cDriver};
 use shared_definitions::controller::ControllerInput;
@@ -13,7 +13,6 @@ use crate::{
     },
     shared_core_values::{AtomicControllerInput, AtomicTelemetry},
     util::vectors::RotationVector2D,
-    TelemetryDataValues,
 };
 use crate::{drivers::imu_sensors::Accelerometer, util::vectors::RotationVector3D};
 use crate::{

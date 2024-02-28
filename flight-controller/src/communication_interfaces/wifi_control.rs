@@ -2,7 +2,7 @@ use crate::config::constants::{
     PAIRING_BSSID_ADDRESS, TRANSMITTER_ADDRESS, WIFI_CONTROLLER_CHANNEL,
 };
 use crate::shared_core_values::AtomicControllerInput;
-use esp_idf_svc::hal::delay::{FreeRtos, BLOCK};
+use esp_idf_svc::hal::delay::BLOCK;
 use esp_idf_svc::hal::task::queue::Queue;
 use esp_idf_svc::sys::{
     esp_wifi_init, esp_wifi_internal_tx, esp_wifi_set_channel, esp_wifi_set_max_tx_power,
@@ -31,11 +31,7 @@ use shared_definitions::{
     },
 };
 use std::sync::atomic::Ordering;
-use std::{
-    ffi::c_void,
-    mem,
-    sync::{Arc, RwLock},
-};
+use std::{ffi::c_void, mem};
 
 use super::controller::RemoteControl;
 
@@ -155,29 +151,29 @@ impl RemoteControl for WifiController {
             match data {
                 Some((input_values, _)) => {
                     shared_controller_input
-                    .roll
-                    .store(input_values.roll, Ordering::Release);
-                shared_controller_input
-                    .pitch
-                    .store(input_values.pitch, Ordering::Release);
-                shared_controller_input
-                    .yaw
-                    .store(input_values.yaw, Ordering::Release);
-                shared_controller_input
-                    .throttle
-                    .store(input_values.throttle, Ordering::Release);
-                shared_controller_input
-                    .kill_motors
-                    .store(input_values.kill_motors, Ordering::Release);
-                shared_controller_input
-                    .start
-                    .store(input_values.start, Ordering::Release);
-                shared_controller_input
-                    .calibrate_esc
-                    .store(input_values.calibrate_esc, Ordering::Release);
-                shared_controller_input
-                    .calibrate_sensors
-                    .store(input_values.calibrate_sensors, Ordering::Release);
+                        .roll
+                        .store(input_values.roll, Ordering::Release);
+                    shared_controller_input
+                        .pitch
+                        .store(input_values.pitch, Ordering::Release);
+                    shared_controller_input
+                        .yaw
+                        .store(input_values.yaw, Ordering::Release);
+                    shared_controller_input
+                        .throttle
+                        .store(input_values.throttle, Ordering::Release);
+                    shared_controller_input
+                        .kill_motors
+                        .store(input_values.kill_motors, Ordering::Release);
+                    shared_controller_input
+                        .start
+                        .store(input_values.start, Ordering::Release);
+                    shared_controller_input
+                        .calibrate_esc
+                        .store(input_values.calibrate_esc, Ordering::Release);
+                    shared_controller_input
+                        .calibrate_sensors
+                        .store(input_values.calibrate_sensors, Ordering::Release);
                 }
                 _ => {}
             }

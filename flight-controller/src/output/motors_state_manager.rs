@@ -34,10 +34,6 @@ impl QuadcopterMotorsStateManager {
         QuadcopterMotorsStateManager { controllers }
     }
 
-    pub fn calibrate_esc(&mut self) {
-        self.controllers[0].calibrate_esc();
-    }
-
     pub fn set_motor_power(&mut self, values: [f32; 4]) {
         for (index, value) in values.into_iter().enumerate() {
             self.controllers[index].set_motor_speed(value);

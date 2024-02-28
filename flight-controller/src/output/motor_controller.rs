@@ -41,7 +41,7 @@ impl MotorController {
             motor_driver: driver,
         }
     }
-
+    #[allow(dead_code)]
     pub fn calibrate_esc(&mut self) {
         let _ = self.motor_driver.set_duty(0_u32).unwrap();
         FreeRtos::delay_ms(1000);

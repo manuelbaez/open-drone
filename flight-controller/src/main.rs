@@ -19,6 +19,7 @@ use crate::communication_interfaces::{i2c::*, ControllerTypes};
 use crate::config::constants::CONTROLLER_TYPE;
 use crate::control::control_loops::start_flight_controllers;
 use crate::shared_core_values::{INPUT_SHARED, TELEMETRY_SHARED};
+use crate::telemetry::start_telemetry_thread;
 use config::constants::{
     ACCEL_X_DEVIATION, ACCEL_Y_DEVIATION, ACCEL_Z_DEVIATION, GYRO_PITCH_CALIBRATION_DEG,
     GYRO_ROLL_CALIBRATION_DEG, GYRO_YAW_CALIBRATION_DEG, MAX_POWER_OVER_THROTTLE, MIN_POWER,
@@ -38,11 +39,8 @@ use output::vehicle_movement_mappers::{
     FlyingVehicleMovementMapper, Quadcopter, VehicleTypesMapper,
 };
 use shared_core_values::{AtomicControllerInput, AtomicTelemetry};
-use shared_definitions::controller::ControllerInput;
 use std::ffi::{c_void, CString};
 use std::sync::atomic::Ordering;
-use std::sync::{Arc, RwLock};
-use telemetry::TelemetryDataValues;
 use util::vectors::{AccelerationVector3D, RotationVector3D};
 
 struct FlightThreadInput<'a> {
@@ -153,30 +151,7 @@ fn main() {
 
     let mut peripherals: Peripherals = Peripherals::take().unwrap();
 
-    // Print telemetry values thread, for debugging/telemetry purposes, later will move this to it's own thread to send to controller.
-    {
-        let telemetry_data = &TELEMETRY_SHARED;
-        let _ = std::thread::Builder::new()
-            .stack_size(4096)
-            .spawn(move || loop {
-                println!(
-                    " Iteration Time: {:?}
-                    Rotation rate {:?}
-                    Motor {:?}
-                    Throttle {:?}",
-                    telemetry_data.loop_exec_time_us.load(Ordering::Relaxed),
-                    telemetry_data.rotation_rate.read(),
-                    [
-                        telemetry_data.motor_1_power.load(Ordering::Relaxed),
-                        telemetry_data.motor_2_power.load(Ordering::Relaxed),
-                        telemetry_data.motor_3_power.load(Ordering::Relaxed),
-                        telemetry_data.motor_4_power.load(Ordering::Relaxed)
-                    ],
-                    telemetry_data.throttle.load(Ordering::Relaxed),
-                );
-                FreeRtos::delay_ms(250);
-            });
-    }
+    start_telemetry_thread(&TELEMETRY_SHARED);
 
     let flight_task_name = CString::new("Flight Controller Task").unwrap();
     unsafe {

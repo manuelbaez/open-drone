@@ -43,7 +43,6 @@ where
         gyro_drift_calibration: RotationVector3D,
         accelerometer_calibration: AccelerationVector3D,
     ) -> Self {
-        FreeRtos::delay_ms(500);// If I don't wait here the app crashes on release
         MPU6050Sensor {
             i2c_driver,
             gyro_drift_calibration,

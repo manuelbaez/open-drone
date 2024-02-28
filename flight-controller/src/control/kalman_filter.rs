@@ -41,10 +41,11 @@ impl KalmanFilter {
         self.state_prediction
     }
 
+    #[allow(dead_code)]
     pub fn get_current_state(&self) -> f32 {
         self.state_prediction
     }
-    
+
     #[allow(dead_code)]
     pub fn get_current_uncertainty(&self) -> f32 {
         self.prediction_uncertainty
