@@ -1,6 +1,4 @@
-use crate::config::constants::{
-    PAIRING_BSSID_ADDRESS, TRANSMITTER_ADDRESS, WIFI_CONTROLLER_CHANNEL,
-};
+use crate::config::constants::{PAIRING_BSSID_ADDRESS, TRANSMITTER_ADDRESS};
 use crate::shared_core_values::AtomicControllerInput;
 use esp_idf_svc::hal::delay::BLOCK;
 use esp_idf_svc::hal::task::queue::Queue;
@@ -45,9 +43,11 @@ pub struct WifiPromiscousPacket {
 pub static CONTROLLER_INPUT_QUEUE: Lazy<Queue<ControllerInput>> =
     Lazy::new(|| Queue::new(mem::size_of::<ControllerInput>()));
 
-pub struct WifiController;
+pub struct WifiRemoteControl {
+    channel: u8,
+}
 
-impl WifiController {
+impl WifiRemoteControl {
     unsafe extern "C" fn sniffer(buffer: *mut c_void, _packet_type: wifi_promiscuous_pkt_type_t) {
         // if packet_type == wifi_promiscuous_pkt_type_t_WIFI_PKT_DATA {
         let packet_pointer = buffer as *const WifiPromiscousPacket;
@@ -115,13 +115,8 @@ impl WifiController {
             magic: WIFI_INIT_CONFIG_MAGIC as i32,
         }
     }
-    pub fn new() -> Self {
-        Self
-    }
-}
 
-impl RemoteControl for WifiController {
-    fn start_changes_monitor(&self, shared_controller_input: &AtomicControllerInput) {
+    pub fn init(&self) {
         unsafe {
             let filter: wifi_promiscuous_filter_t = wifi_promiscuous_filter_t {
                 filter_mask: WIFI_PROMIS_FILTER_MASK_DATA,
@@ -138,16 +133,21 @@ impl RemoteControl for WifiController {
             esp_wifi_set_promiscuous_filter(filter_pointer);
             esp_wifi_set_promiscuous_rx_cb(Option::Some(Self::sniffer));
             esp_wifi_set_max_tx_power(80); //Set to 20dbm transmit power
-            esp_wifi_set_channel(
-                WIFI_CONTROLLER_CHANNEL,
-                wifi_second_chan_t_WIFI_SECOND_CHAN_NONE,
-            );
+            esp_wifi_set_channel(self.channel, wifi_second_chan_t_WIFI_SECOND_CHAN_NONE);
             // esp_wifi_80211_tx(wifi_interface_t_WIFI_IF_NAN, buffer, len, en_sys_seq);
             // esp_wifi_internal_tx(wifi_if, buffer, len)
         }
+    }
+    
+    pub fn new(channel: u8) -> Self {
+        Self { channel }
+    }
+}
+
+impl RemoteControl for WifiRemoteControl {
+    fn start_changes_monitor(&self, shared_controller_input: &AtomicControllerInput) {
         loop {
             let data = CONTROLLER_INPUT_QUEUE.recv_front(BLOCK);
-
             match data {
                 Some((input_values, _)) => {
                     shared_controller_input

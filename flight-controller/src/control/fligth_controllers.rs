@@ -66,8 +66,7 @@ pub struct AngleModeControllerInput {
 }
 
 pub struct AngleModeFlightController {
-    roll_pid: PID,
-    pitch_pid: PID,
+    output_gain: f32,
     roll_kalman_filter: KalmanFilter,
     pitch_kalman_filter: KalmanFilter,
     max_rotation_rate: f32,
@@ -85,8 +84,7 @@ impl AngleModeFlightController {
             KalmanFilter::new(gyro_drift_deg_sec, accelerometer_uncertainty_deg);
 
         AngleModeFlightController {
-            roll_pid: PID::new(2.0, 0.0, 0.0, 0.0),
-            pitch_pid: PID::new(2.0, 0.0, 0.0, 0.0),
+            output_gain: 2.0,
             roll_kalman_filter,
             pitch_kalman_filter,
             max_rotation_rate,
@@ -106,16 +104,9 @@ impl AngleModeFlightController {
             input.iteration_time,
         );
 
-        let mut roll_output = self.roll_pid.get_update(
-            input.desired_rotation.roll,
-            estimated_roll,
-            input.iteration_time,
-        );
-        let mut pitch_output = self.pitch_pid.get_update(
-            input.desired_rotation.pitch,
-            estimated_pitch,
-            input.iteration_time,
-        );
+        let mut roll_output = self.output_gain * (input.desired_rotation.roll - estimated_roll);
+
+        let mut pitch_output = self.output_gain * (input.desired_rotation.pitch - estimated_pitch);
 
         if roll_output > self.max_rotation_rate {
             roll_output = self.max_rotation_rate;
