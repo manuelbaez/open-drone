@@ -43,11 +43,11 @@ impl AtomicRotationVector3D {
     }
     pub fn store(&self, vector: RotationVector3D) {
         self.roll
-            .store((vector.roll * 100.0) as i16, Ordering::Release);
+            .store((vector.roll * 100.0) as i16, Ordering::Relaxed);
         self.pitch
-            .store((vector.pitch * 100.0) as i16, Ordering::Release);
+            .store((vector.pitch * 100.0) as i16, Ordering::Relaxed);
         self.yaw
-            .store((vector.yaw * 100.0) as i16, Ordering::Release);
+            .store((vector.yaw * 100.0) as i16, Ordering::Relaxed);
     }
     pub fn read(&self) -> RotationVector3D {
         RotationVector3D {

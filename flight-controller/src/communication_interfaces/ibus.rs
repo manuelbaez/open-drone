@@ -131,28 +131,28 @@ impl<'a> IBusController<'a> {
 
         shared_controller_input
             .roll
-            .store(input_values.roll, Ordering::Release);
+            .store(input_values.roll, Ordering::Relaxed);
         shared_controller_input
             .pitch
-            .store(input_values.pitch, Ordering::Release);
+            .store(input_values.pitch, Ordering::Relaxed);
         shared_controller_input
             .yaw
-            .store(input_values.yaw, Ordering::Release);
+            .store(input_values.yaw, Ordering::Relaxed);
         shared_controller_input
             .throttle
-            .store(input_values.throttle, Ordering::Release);
+            .store(input_values.throttle, Ordering::Relaxed);
         shared_controller_input
             .kill_motors
-            .store(input_values.kill_motors, Ordering::Release);
+            .store(input_values.kill_motors, Ordering::Relaxed);
         shared_controller_input
             .start
-            .store(input_values.start, Ordering::Release);
+            .store(input_values.start, Ordering::Relaxed);
         shared_controller_input
             .calibrate_esc
-            .store(input_values.calibrate_esc, Ordering::Release);
+            .store(input_values.calibrate_esc, Ordering::Relaxed);
         shared_controller_input
             .calibrate_sensors
-            .store(input_values.calibrate_sensors, Ordering::Release);
+            .store(input_values.calibrate_sensors, Ordering::Relaxed);
     }
 }
 

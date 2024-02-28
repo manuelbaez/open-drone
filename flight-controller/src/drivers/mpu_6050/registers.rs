@@ -76,7 +76,9 @@ impl MpuAccelSensitivityRanges {
 
 #[repr(u8)]
 #[allow(dead_code)]
+#[derive(Clone)]
 pub enum LowPassFrequencyValues {
+    None = 0x0,
     Freq10Hz = 0x5,
     Freq21Hz = 0x4,
 }

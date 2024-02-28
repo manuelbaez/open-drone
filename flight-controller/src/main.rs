@@ -44,8 +44,6 @@ use std::sync::atomic::Ordering;
 use util::vectors::{AccelerationVector3D, RotationVector3D};
 
 struct FlightThreadInput<'a> {
-    controller_input: &'a AtomicControllerInput,
-    telemetry_data: &'a AtomicTelemetry,
     peripherals: &'a mut Peripherals,
 }
 
@@ -56,7 +54,6 @@ fn flight_thread(
 ) {
     let i2c_driver = get_i2c_driver(peripherals);
     //Wait for the i2c driver to initialize
-    FreeRtos::delay_ms(500);
     let mut motors_manager = QuadcopterMotorsStateManager::new(peripherals);
 
     let acceleromenter_calibration = AccelerationVector3D {
@@ -73,7 +70,6 @@ fn flight_thread(
 
     let mut imu = MPU6050Sensor::new(i2c_driver, gyro_calibration, acceleromenter_calibration);
     imu.enable_low_pass_filter(LowPassFrequencyValues::Freq10Hz);
-    FreeRtos::delay_ms(1000);
     imu.init();
 
     let output_handler = match VEHICLE_TYPE {
@@ -99,16 +95,16 @@ fn flight_thread(
 
                     telemetry_data
                         .motor_1_power
-                        .store(mapped_to_motors_numbers[0] as u8, Ordering::Release);
+                        .store(mapped_to_motors_numbers[0] as u8, Ordering::Relaxed);
                     telemetry_data
                         .motor_2_power
-                        .store(mapped_to_motors_numbers[1] as u8, Ordering::Release);
+                        .store(mapped_to_motors_numbers[1] as u8, Ordering::Relaxed);
                     telemetry_data
                         .motor_3_power
-                        .store(mapped_to_motors_numbers[2] as u8, Ordering::Release);
+                        .store(mapped_to_motors_numbers[2] as u8, Ordering::Relaxed);
                     telemetry_data
                         .motor_4_power
-                        .store(mapped_to_motors_numbers[3] as u8, Ordering::Release);
+                        .store(mapped_to_motors_numbers[3] as u8, Ordering::Relaxed);
 
                     motors_manager.set_motor_power(mapped_to_motors_numbers);
                 }
@@ -123,8 +119,8 @@ unsafe extern "C" fn flight_thread_task_entrypoint(params: *mut core::ffi::c_voi
     let controller_input_ptr = params as *const _ as *const FlightThreadInput;
     let controller_input_shared = controller_input_ptr.read();
     flight_thread(
-        controller_input_shared.controller_input,
-        controller_input_shared.telemetry_data,
+        &INPUT_SHARED,
+        &TELEMETRY_SHARED,
         controller_input_shared.peripherals,
     );
     vTaskDelete(std::ptr::null_mut());
@@ -151,7 +147,7 @@ fn main() {
 
     let mut peripherals: Peripherals = Peripherals::take().unwrap();
 
-    start_telemetry_thread(&TELEMETRY_SHARED);
+    // start_telemetry_thread(&TELEMETRY_SHARED);
 
     let flight_task_name = CString::new("Flight Controller Task").unwrap();
     unsafe {
@@ -160,8 +156,6 @@ fn main() {
             flight_task_name.as_ptr(),
             4096,
             &FlightThreadInput {
-                controller_input: &INPUT_SHARED,
-                telemetry_data: &TELEMETRY_SHARED,
                 peripherals: &mut peripherals,
             } as *const _ as *mut c_void,
             1,

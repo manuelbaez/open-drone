@@ -138,20 +138,15 @@ pub fn start_flight_controllers(
         let controller_output =
             rotation_mode_flight_controller.get_next_output(rotation_flight_controller_input);
 
-        // telemetry_data_lock.rate_controller_output = controller_output.clone();
-        // telemetry_data_lock.angle_controller_output = desired_rotation_rate_2d;
-        // telemetry_data_lock.kalman_predicted_state =
-        //     angle_flight_controller.get_current_kalman_predicted_state();
-
         //Store telemetry data
-        telemetry_data.rotation_rate.store(rotation_rates.clone());
         telemetry_data.loop_exec_time_us.store(
             (current_time_us - previous_time_us) as i32,
-            Ordering::Release,
+            Ordering::Relaxed,
         );
         telemetry_data
             .throttle
-            .store(throttle as u8, Ordering::Release);
+            .store(throttle as u8, Ordering::Relaxed);
+        telemetry_data.rotation_rate.store(rotation_rates);
 
         previous_time_us = current_time_us;
 

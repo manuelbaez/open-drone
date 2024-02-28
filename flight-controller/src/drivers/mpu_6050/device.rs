@@ -32,6 +32,7 @@ where
     gyro_sensitivity: MpuGyroSensitivityRanges,
     gyro_drift_calibration: RotationVector3D,
     accelerometer_calibration: AccelerationVector3D,
+    low_pass_filter_freq: LowPassFrequencyValues,
 }
 
 impl<I> MPU6050Sensor<I>
@@ -50,6 +51,7 @@ where
             mpu_addr: DEFAULT_SLAVE_ADDR,
             accel_sensitivity: MpuAccelSensitivityRanges::ACCEL_RANGE_2G,
             gyro_sensitivity: MpuGyroSensitivityRanges::GYRO_RANGE_500,
+            low_pass_filter_freq: LowPassFrequencyValues::None,
         }
     }
 
@@ -59,19 +61,18 @@ where
         self.update_accel_config_register();
         FreeRtos::delay_ms(5);
         self.set_power_management_register_default();
-        FreeRtos::delay_ms(250);
+        FreeRtos::delay_ms(500);
+        self.update_dlpf_filter_register();
     }
 
     pub fn enable_low_pass_filter(&mut self, low_pass_freq: LowPassFrequencyValues) {
-        let reg_value = match low_pass_freq {
-            LowPassFrequencyValues::Freq10Hz => 0x5_u8,
-            LowPassFrequencyValues::Freq21Hz => 0x4_u8,
-        };
-        self.i2c_driver
-            .write(self.mpu_addr, &[MPURegisters::CONFIG, reg_value])
-            .unwrap(); //Set to 10hz
-        FreeRtos::delay_ms(100);
+        log::info!(
+            "Set mpu low pass filter {:02x?}",
+            low_pass_freq.clone() as u8
+        );
+        self.low_pass_filter_freq = low_pass_freq;
     }
+
     #[allow(dead_code)]
     pub fn set_gyro_sensitivity(&mut self, sensitivity: MpuGyroSensitivityRanges) {
         self.gyro_sensitivity = sensitivity;
@@ -103,6 +104,17 @@ where
                 &[MPURegisters::ACCEL_CONFIG, register_bitmap],
             )
             .unwrap();
+    }
+
+    pub fn update_dlpf_filter_register(&mut self) {
+        let reg_value = match self.low_pass_filter_freq {
+            LowPassFrequencyValues::Freq10Hz => 0x5_u8,
+            LowPassFrequencyValues::Freq21Hz => 0x4_u8,
+            LowPassFrequencyValues::None => 0x0_u8,
+        };
+        let buffer = [MPURegisters::CONFIG, reg_value];
+        self.i2c_driver.write(self.mpu_addr, &buffer).unwrap(); //Set to 10hz
+        log::info!("Set mpu low pass filter {:02x?}", buffer);
     }
 
     fn get_accel_data(&mut self) -> Mpu6050AccelRegOut {
