@@ -1,5 +1,5 @@
 use super::controller::RemoteControl;
-use crate::shared_core_values::AtomicControllerInput;
+use crate::shared_core_values::{AtomicControllerInput, AtomicTelemetry};
 use crate::util::time::get_current_system_time;
 use esp_idf_svc::hal::delay::BLOCK;
 use esp_idf_svc::hal::peripheral::Peripheral;
@@ -16,16 +16,31 @@ const PROTOCOL_MESSAGE_TIMEGAP_US: i64 = 3500;
 const PROTOCOL_SIZE: usize = 0x20;
 const PROTOCOL_OVERHEAD: u8 = 3; // <len><cmd><data....><chkl><chkh>
 const PROTOCOL_CHANNELS: usize = 10;
-const PROTOCOL_COMMAND40: u8 = 0x40; // Command is always 0x40
 const CHANNEL_CENTER_POINT: u16 = 1500;
 const CHANNEL_MAX_POINT: u16 = 2000;
 const CHANNEL_MIN_POINT: u16 = 1000;
+
+struct IbusCommands;
+impl IbusCommands {
+    pub const CHANNELS_DATA: u8 = 0x40; // Command is always 0x40
+    pub const SENSORS_DISCOVER: u8 = 0x80; // Command discover sensor (lowest 4 bits are sensor)
+    pub const POLL_SENSOR_TYPE: u8 = 0x90; // Command discover sensor type (lowest 4 bits are sensor)
+    pub const POLL_SENSOR_VALUE: u8 = 0xA0; // Command send sensor data (lowest 4 bits are sensor)
+    pub const SENSOR_DISCOVERED_RESPONSE_COMMAND: u8 = 0x04;
+    pub const SENSOR_VALUE_RESPONSE_COMMAND: u8 = 0x04;
+    pub const SENSOR_TYPE_RESPONSE_COMMAND: u8 = 0x06;
+}
 enum ReadingStages {
     Length,
     Data,
     GetChecksumLByte,
     GetChecksumHByte,
     Discard,
+}
+
+pub struct IbusTelemetrySensorsIds;
+impl IbusTelemetrySensorsIds {
+    pub const IBUS_SENSOR_TYPE_CELL: u8 = 0x04;
 }
 
 #[repr(u8)]
@@ -101,7 +116,7 @@ impl<'a> IBusController<'a> {
         channel_value != CHANNEL_MIN_POINT
     }
 
-    fn process_ibus_message(
+    fn process_ibus_channels_message(
         data: [u8; PROTOCOL_SIZE],
         shared_controller_input: &AtomicControllerInput,
     ) {
@@ -154,6 +169,11 @@ impl<'a> IBusController<'a> {
             .calibrate_sensors
             .store(input_values.calibrate_sensors, Ordering::Relaxed);
     }
+
+    pub fn send_telemetry_data(&self, telemetry_shared: AtomicTelemetry) {
+        let ibus_sensor_data = [IbusTelemetrySensorsIds::IBUS_SENSOR_TYPE_CELL];
+        self.uart_driver.write(&ibus_sensor_data).unwrap();
+    }
 }
 
 impl<'a> RemoteControl for IBusController<'a> {
@@ -181,7 +201,7 @@ impl<'a> RemoteControl for IBusController<'a> {
             match state {
                 ReadingStages::Length => {
                     current_byte_count = 0;
-                    if read_buffer[0] <= PROTOCOL_SIZE as u8 {
+                    if read_buffer[0] <= PROTOCOL_SIZE as u8 && read_buffer[0] > PROTOCOL_OVERHEAD{
                         current_message_length = read_buffer[0] - PROTOCOL_OVERHEAD;
                         state = ReadingStages::Data;
                         target_checksum = 0xffff - read_buffer[0] as u32
@@ -209,12 +229,57 @@ impl<'a> RemoteControl for IBusController<'a> {
                     checksum = ((read_buffer[0] as u16) << 8) as u32 + checksum as u32;
                     if target_checksum == checksum {
                         match data_buffer[0] {
-                            PROTOCOL_COMMAND40 => {
-                                Self::process_ibus_message(data_buffer, shared_controller_input);
+                            IbusCommands::CHANNELS_DATA => {
+                                Self::process_ibus_channels_message(
+                                    data_buffer,
+                                    shared_controller_input,
+                                );
                             }
-                            _ => (),
-                        }
+                            _ => {
+                                let sensor_addr: u8 = data_buffer[0] & 0x0f; //4 LS Bits of the read byte
+                                if sensor_addr <= 1
+                                && sensor_addr > 0
+                                && current_message_length == 1
+                                {
+                                    println!("Polled Sensor");
+                                    let mapped_command = data_buffer[0] & 0xf0; //4 MS Bits of the read byte
+                                    match mapped_command {
+                                        IbusCommands::SENSORS_DISCOVER => {
+                                            // current_sensor_poll_count += 1;
+                                            self.uart_driver
+                                                .write(&[
+                                                    IbusCommands::SENSOR_DISCOVERED_RESPONSE_COMMAND,
+                                                    IbusCommands::SENSORS_DISCOVER + sensor_addr,
+                                                ])
+                                                .unwrap();
+                                        }
+                                        IbusCommands::POLL_SENSOR_TYPE => {
+                                            self.uart_driver
+                                                .write(&[
+                                                    IbusCommands::SENSOR_TYPE_RESPONSE_COMMAND,
+                                                    IbusCommands::POLL_SENSOR_TYPE + sensor_addr,
+                                                    IbusTelemetrySensorsIds::IBUS_SENSOR_TYPE_CELL,
+                                                    0x2, //Sensor data lenth
+                                                ])
+                                                .unwrap();
+                                        }
+                                        IbusCommands::POLL_SENSOR_VALUE => {
+                                            self.uart_driver
+                                                .write(&[
+                                                    IbusCommands::SENSOR_VALUE_RESPONSE_COMMAND + 0x2, //Sensor Data Length,
+                                                    IbusCommands::POLL_SENSOR_VALUE + sensor_addr,
+                                                    (35_u16 & 0x00ff) as u8, /*Sensor Value lower byte */
+                                                    ((35_u16 >> 8) & 0x00ff) as u8, /*Sensor Value higher byte */
+                                                ])
+                                                .unwrap();
+                                        }
+                                        _ => (),
+                                    }
+                                }
+                            }
+                        };
                     }
+                    state = ReadingStages::Discard;
                 }
                 _ => (),
             }
