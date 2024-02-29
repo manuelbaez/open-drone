@@ -157,7 +157,7 @@ impl<'a> IBusController<'a> {
 }
 
 impl<'a> RemoteControl for IBusController<'a> {
-    fn start_changes_monitor(&self, shared_controller_input: &AtomicControllerInput) {
+    fn start_input_changes_monitor(&self, shared_controller_input: &AtomicControllerInput) {
         let mut data_buffer = [0_u8; PROTOCOL_SIZE];
         let mut current_byte_count = 0_u8;
         let mut current_message_length = 0_u8;

@@ -1,5 +1,6 @@
 #![feature(trait_alias)]
 #![feature(ptr_metadata)]
+#![feature(const_float_bits_conv)]
 
 mod communication_interfaces;
 mod control;
@@ -13,19 +14,19 @@ pub mod config {
 }
 
 use crate::communication_interfaces::controller::RemoteControl;
+use crate::communication_interfaces::i2c::*;
+#[cfg(feature = "ibus-controller")]
 use crate::communication_interfaces::ibus::IBusController;
-use crate::communication_interfaces::wifi_control::WifiRemoteControl;
-use crate::communication_interfaces::{i2c::*, ControllerTypes};
-use crate::config::constants::{CONTROLLER_TYPE, WIFI_CONTROLLER_CHANNEL};
-use crate::shared_core_values::INPUT_SHARED;
+use crate::shared_core_values::SHARED_CONTROLLER_INPUT;
 use crate::threads::{flight_thread, telemetry_thread};
+#[cfg(any(feature = "wifi-controller", feature = "wifi-tuning"))]
+use {
+    crate::communication_interfaces::wifi_control::WifiRemoteControl,
+    crate::config::constants::WIFI_CONTROLLER_CHANNEL,
+};
 
 use esp_idf_svc::hal::peripherals::Peripherals;
 use esp_idf_svc::sys::{vTaskDelete, xTaskCreatePinnedToCore};
-// use esp_idf_svc::sys::{
-//     esp_pm_config_t, esp_pm_configure, esp_pm_lock_acquire, esp_pm_lock_handle_t,
-//     esp_pm_lock_type_t_ESP_PM_CPU_FREQ_MAX, vTaskDelete, xTaskCreatePinnedToCore,
-// };
 use once_cell::sync::Lazy;
 use std::ops::DerefMut;
 use std::sync::Mutex;
@@ -60,17 +61,21 @@ fn main() {
         )
     };
 
-    match CONTROLLER_TYPE {
-        ControllerTypes::Wifi => {
-            let controller = WifiRemoteControl::new(WIFI_CONTROLLER_CHANNEL);
-            controller.init();
-            controller.start_changes_monitor(&INPUT_SHARED)
-        }
-        ControllerTypes::Ibus => {
-            let mut peripherals_lock = SHARED_PERIPHERALS.lock().unwrap();
-            let controller = IBusController::new(peripherals_lock.deref_mut());
-            drop(peripherals_lock);
-            controller.start_changes_monitor(&INPUT_SHARED)
-        }
-    };
+    #[cfg(feature = "wifi")]
+    {
+        let controller = WifiRemoteControl::new(WIFI_CONTROLLER_CHANNEL);
+        controller.init();
+        #[cfg(feature = "wifi-controller")]
+        controller.start_input_changes_monitor(&SHARED_CONTROLLER_INPUT);
+        #[cfg(feature = "wifi-tuning")]
+        controller.start_tuing_monitor();
+    }
+
+    #[cfg(all(not(feature = "wifi-controller"), feature = "ibus-controller"))]
+    {
+        let mut peripherals_lock = SHARED_PERIPHERALS.lock().unwrap();
+        let controller = IBusController::new(peripherals_lock.deref_mut());
+        drop(peripherals_lock);
+        controller.start_input_changes_monitor(&SHARED_CONTROLLER_INPUT)
+    }
 }

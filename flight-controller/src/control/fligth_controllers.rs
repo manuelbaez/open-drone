@@ -1,3 +1,5 @@
+use shared_definitions::controller::PIDTuneInput;
+
 use crate::util::vectors::{RotationVector2D, RotationVector3D};
 
 use super::{kalman_filter::KalmanFilter, pid::PID};
@@ -8,6 +10,7 @@ pub struct RotationRateControllerInput {
     pub iteration_time: f32,
 }
 
+#[derive(Clone)]
 pub struct RotationRateFlightController {
     roll_pid: PID,
     pitch_pid: PID,
@@ -54,6 +57,13 @@ impl RotationRateFlightController {
         self.pitch_pid.reset();
         self.roll_pid.reset();
         self.yaw_pid.reset();
+    }
+    
+    #[allow(dead_code)]
+    pub fn set_pid_tune(&mut self, tune_values: PIDTuneInput) {
+        self.roll_pid.set_tune_values(tune_values.roll);
+        self.pitch_pid.set_tune_values(tune_values.pitch);
+        self.yaw_pid.set_tune_values(tune_values.yaw);
     }
 }
 

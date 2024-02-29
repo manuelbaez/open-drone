@@ -1,3 +1,6 @@
+use shared_definitions::controller::PIDTuneConfig;
+
+#[derive(Clone)]
 pub struct PID {
     previous_error: f32,
     proportional_multiplier: f32,
@@ -57,5 +60,13 @@ impl PID {
     pub fn reset(&mut self) {
         self.accumulated_error = 0.0;
         self.previous_error = 0.0;
+    }
+
+    #[allow(dead_code)]
+    pub fn set_tune_values(&mut self, tune_values: PIDTuneConfig) {
+        self.proportional_multiplier = tune_values.proportional_multiplier;
+        self.integral_multiplier = tune_values.integral_multiplier;
+        self.derivative_multiplier = tune_values.derivative_multiplier;
+        self.max_accumulated_error = tune_values.max_accumulated_error;
     }
 }

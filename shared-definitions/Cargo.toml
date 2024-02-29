@@ -4,9 +4,12 @@ version = "0.1.0"
 edition = "2021"
 
 [lib]
-name="shared_definitions"
+name = "shared_definitions"
 path = "src/mod.rs"
 
 [dependencies]
 bitfield-struct = "0.6.0"
 bitflags = "2.4.2"
+
+[features]
+wifi = []

@@ -1,5 +1,4 @@
 use crate::config::constants::{PAIRING_BSSID_ADDRESS, TRANSMITTER_ADDRESS};
-use crate::shared_core_values::AtomicControllerInput;
 use esp_idf_svc::hal::delay::BLOCK;
 use esp_idf_svc::hal::task::queue::Queue;
 use esp_idf_svc::sys::{
@@ -21,17 +20,19 @@ use esp_idf_svc::sys::{
     WIFI_TASK_CORE_ID,
 };
 use once_cell::sync::Lazy;
-use shared_definitions::{
-    controller::ControllerInput,
-    wifi::{
-        ieee80211_frames::{GenericWifiPacketFrameHeader, IBSSWifiPacketFrame},
-        payloads::CustomSAPs,
-    },
+use shared_definitions::controller::PIDTuneInput;
+use shared_definitions::wifi::{
+    ieee80211_frames::{GenericWifiPacketFrameHeader, IBSSWifiPacketFrame},
+    payloads::CustomSAPs,
 };
 use std::sync::atomic::Ordering;
 use std::{ffi::c_void, mem};
 
-use super::controller::RemoteControl;
+#[cfg(feature = "wifi-controller")]
+use {
+    super::controller::RemoteControl, crate::shared_core_values::AtomicControllerInput,
+    shared_definitions::controller::ControllerInput,
+};
 
 ///Had to construct my own struct as I couldn't work with the __IncompleteArrayField<> in wifi_promiscuous_pkt_t
 #[repr(C)]
@@ -40,8 +41,13 @@ pub struct WifiPromiscousPacket {
     pub payload: GenericWifiPacketFrameHeader,
 }
 
+#[cfg(feature = "wifi-controller")]
 pub static CONTROLLER_INPUT_QUEUE: Lazy<Queue<ControllerInput>> =
     Lazy::new(|| Queue::new(mem::size_of::<ControllerInput>()));
+
+#[cfg(feature = "wifi-tuning")]
+pub static PID_TUNE_MESSAGE_QUEUE: Lazy<Queue<PIDTuneInput>> =
+    Lazy::new(|| Queue::new(mem::size_of::<PIDTuneInput>()));
 
 pub struct WifiRemoteControl {
     channel: u8,
@@ -67,7 +73,9 @@ impl WifiRemoteControl {
         if bssid.mac == PAIRING_BSSID_ADDRESS && transmitter_addr.mac == TRANSMITTER_ADDRESS {
             let llc = wifi_frame.logical_link_control;
             let dsap = llc.dsap();
-            match CustomSAPs::try_from(dsap).unwrap() {
+            let dsap = CustomSAPs::try_from(dsap).unwrap();
+            match dsap {
+                #[cfg(feature = "wifi-controller")]
                 CustomSAPs::ControllerFrame => {
                     let parsed_packet: IBSSWifiPacketFrame<ControllerInput> = mem::zeroed();
 
@@ -85,6 +93,26 @@ impl WifiRemoteControl {
                         result.unwrap();
                     }
                 }
+                #[cfg(feature = "wifi-tuning")]
+                CustomSAPs::PidTuningFrame => {
+                    let parsed_packet: IBSSWifiPacketFrame<PIDTuneInput> = mem::zeroed();
+                    let parsed_packet_size = mem::size_of::<IBSSWifiPacketFrame<PIDTuneInput>>();
+                    let parsed_packet_buffer = core::slice::from_raw_parts_mut(
+                        &parsed_packet as *const _ as *mut u8,
+                        parsed_packet_size,
+                    );
+
+                    parsed_packet_buffer.clone_from_slice(&wifi_frame_data[..parsed_packet_size]);
+
+                    let data = parsed_packet.data;
+                    let result: Result<bool, esp_idf_svc::sys::EspError> =
+                        PID_TUNE_MESSAGE_QUEUE.send_back(data, 0);
+                    if !result.is_err() {
+                        result.unwrap();
+                    }
+                }
+                #[cfg(not(all(feature = "wifi-controller", feature = "wifi-controller")))]
+                _ => (),
             }
         }
     }
@@ -138,14 +166,68 @@ impl WifiRemoteControl {
             // esp_wifi_internal_tx(wifi_if, buffer, len)
         }
     }
-    
+
     pub fn new(channel: u8) -> Self {
         Self { channel }
     }
+
+    #[cfg(feature = "wifi-tuning")]
+    pub fn start_tuing_monitor(&self) {
+        use crate::shared_core_values::SHARED_TUNING;
+
+        let message_queue = &PID_TUNE_MESSAGE_QUEUE;
+        let _tuning = std::thread::Builder::new().stack_size(4096).spawn(|| loop {
+            let data = message_queue.recv_front(BLOCK);
+            match data {
+                Some((tuning_values, _)) => {
+                    SHARED_TUNING.pitch.proportional.store(
+                        tuning_values.pitch.proportional_multiplier,
+                        Ordering::Relaxed,
+                    );
+                    SHARED_TUNING
+                        .pitch
+                        .integral
+                        .store(tuning_values.pitch.integral_multiplier, Ordering::Relaxed);
+                    SHARED_TUNING
+                        .pitch
+                        .derivative
+                        .store(tuning_values.pitch.derivative_multiplier, Ordering::Relaxed);
+
+                    SHARED_TUNING.roll.proportional.store(
+                        tuning_values.roll.proportional_multiplier,
+                        Ordering::Relaxed,
+                    );
+                    SHARED_TUNING
+                        .roll
+                        .integral
+                        .store(tuning_values.roll.integral_multiplier, Ordering::Relaxed);
+                    SHARED_TUNING
+                        .roll
+                        .derivative
+                        .store(tuning_values.roll.derivative_multiplier, Ordering::Relaxed);
+
+                    SHARED_TUNING
+                        .yaw
+                        .proportional
+                        .store(tuning_values.yaw.proportional_multiplier, Ordering::Relaxed);
+                    SHARED_TUNING
+                        .yaw
+                        .integral
+                        .store(tuning_values.yaw.integral_multiplier, Ordering::Relaxed);
+                    SHARED_TUNING
+                        .yaw
+                        .derivative
+                        .store(tuning_values.yaw.derivative_multiplier, Ordering::Relaxed);
+                }
+                None => (),
+            }
+        });
+    }
 }
 
+#[cfg(feature = "wifi-controller")]
 impl RemoteControl for WifiRemoteControl {
-    fn start_changes_monitor(&self, shared_controller_input: &AtomicControllerInput) {
+    fn start_input_changes_monitor(&self, shared_controller_input: &AtomicControllerInput) {
         loop {
             let data = CONTROLLER_INPUT_QUEUE.recv_front(BLOCK);
             match data {

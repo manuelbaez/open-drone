@@ -1,6 +1,4 @@
-use crate::{
-    communication_interfaces::ControllerTypes, output::vehicle_movement_mappers::VehicleTypesMapper,
-};
+use crate::output::vehicle_movement_mappers::VehicleTypesMapper;
 
 // Gyroscope Drift Calibrations
 pub const GYRO_PITCH_CALIBRATION_DEG: f32 = -1.9987461681754335;
@@ -32,6 +30,5 @@ pub const ESC_PWM_FREQUENCY_HZ: u32 = 2000;
 pub const PAIRING_BSSID_ADDRESS: [u8; 6] = [0x50, 0xba, 0x61, 0x2a, 0x4a, 0x5e];
 pub const TRANSMITTER_ADDRESS: [u8; 6] = [0xf2, 0xda, 0xd7, 0x60, 0x7e, 0xa9];
 
-pub const CONTROLLER_TYPE: ControllerTypes = ControllerTypes::Ibus;
 pub const VEHICLE_TYPE: VehicleTypesMapper = VehicleTypesMapper::Quadcopter;
 pub const WIFI_CONTROLLER_CHANNEL: u8 = 13;

@@ -15,14 +15,14 @@ use crate::{
         motors_state_manager::QuadcopterMotorsStateManager,
         vehicle_movement_mappers::{FlyingVehicleMovementMapper, Quadcopter, VehicleTypesMapper},
     },
-    shared_core_values::{INPUT_SHARED, TELEMETRY_SHARED},
+    shared_core_values::{SHARED_CONTROLLER_INPUT, SHARED_TELEMETRY},
     util::vectors::{AccelerationVector3D, RotationVector3D},
     SHARED_PERIPHERALS,
 };
 
 pub fn flight_thread() {
-    let controller_input_shared = &INPUT_SHARED;
-    let telemetry_shared = &TELEMETRY_SHARED;
+    let controller_input_shared = &SHARED_CONTROLLER_INPUT;
+    let telemetry_shared = &SHARED_TELEMETRY;
     let peripherals_shared = &SHARED_PERIPHERALS;
 
     let mut peripherals_lock = peripherals_shared.lock().unwrap();
@@ -95,7 +95,7 @@ pub fn flight_thread() {
 }
 
 pub fn telemetry_thread() {
-    let telemetry_data = &TELEMETRY_SHARED;
+    let telemetry_data = &SHARED_TELEMETRY;
     loop {
         log::info!(
             " 

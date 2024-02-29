@@ -10,3 +10,20 @@ pub struct ControllerInput {
     pub calibrate_esc: bool,
     pub calibrate_sensors: bool,
 }
+
+#[derive(Debug, Clone, Copy, Default)]
+#[repr(C, packed)]
+pub struct PIDTuneConfig {
+    pub proportional_multiplier: f32,
+    pub integral_multiplier: f32,
+    pub derivative_multiplier: f32,
+    pub max_accumulated_error: f32,
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+#[repr(C, packed)]
+pub struct PIDTuneInput {
+    pub roll: PIDTuneConfig,
+    pub pitch: PIDTuneConfig,
+    pub yaw: PIDTuneConfig,
+}

@@ -22,6 +22,8 @@ use crate::{
     },
     util::time::get_current_system_time,
 };
+#[cfg(feature = "wifi-tuning")]
+use {crate::shared_core_values::SHARED_TUNING, shared_definitions::controller::PIDTuneInput};
 
 const US_IN_SECOND: f32 = 1_000_000.0_f32;
 
@@ -63,6 +65,16 @@ pub fn start_flight_controllers(
             calibrate_esc: controller_input.calibrate_esc.load(Ordering::Relaxed),
             calibrate_sensors: controller_input.calibrate_sensors.load(Ordering::Relaxed),
         };
+
+        #[cfg(feature = "wifi-tuning")]
+        {
+            let tune_values = PIDTuneInput {
+                roll: SHARED_TUNING.roll.map_to_pid_input(),
+                pitch: SHARED_TUNING.pitch.map_to_pid_input(),
+                yaw: SHARED_TUNING.yaw.map_to_pid_input(),
+            };
+            rotation_mode_flight_controller.set_pid_tune(tune_values);
+        }
 
         match drone_on {
             true => {
