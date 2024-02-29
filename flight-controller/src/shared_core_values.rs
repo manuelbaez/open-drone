@@ -3,6 +3,20 @@ use std::sync::atomic::{AtomicBool, AtomicI16, AtomicI32, AtomicU32, AtomicU8, O
 use shared_definitions::controller::PIDTuneConfig;
 
 use crate::util::vectors::RotationVector3D;
+
+pub struct AtomicF32(AtomicU32);
+impl AtomicF32 {
+    pub const fn new(val: f32) -> Self {
+        Self(AtomicU32::new(val.to_bits()))
+    }
+    pub fn load(&self, order: Ordering) -> f32 {
+        f32::from_bits(self.0.load(order))
+    }
+    pub fn store(&self, val: f32, order: Ordering) {
+        self.0.store(val.to_bits(), order)
+    }
+}
+
 pub struct AtomicControllerInput {
     pub roll: AtomicI16,
     pub pitch: AtomicI16,
@@ -68,6 +82,7 @@ pub struct AtomicTelemetry {
     pub motor_3_power: AtomicU8,
     pub motor_4_power: AtomicU8,
     pub throttle: AtomicU8,
+    pub battery_avg_cell_voltage: AtomicF32,
 }
 
 impl AtomicTelemetry {
@@ -80,20 +95,8 @@ impl AtomicTelemetry {
             motor_3_power: AtomicU8::new(0),
             motor_4_power: AtomicU8::new(0),
             throttle: AtomicU8::new(0),
+            battery_avg_cell_voltage: AtomicF32::new(0.0),
         }
-    }
-}
-
-pub struct AtomicF32(AtomicU32);
-impl AtomicF32 {
-    pub const fn new(val: f32) -> Self {
-        Self(AtomicU32::new(val.to_bits()))
-    }
-    pub fn load(&self, order: Ordering) -> f32 {
-        f32::from_bits(self.0.load(order))
-    }
-    pub fn store(&self, val: f32, order: Ordering) {
-        self.0.store(val.to_bits(), order)
     }
 }
 
@@ -132,6 +135,8 @@ pub struct AtomicPidTuningInput {
     pub pitch: AtomicPidTuning,
     pub yaw: AtomicPidTuning,
 }
+
+#[cfg(feature = "wifi-tuning")]
 impl AtomicPidTuningInput {
     pub const fn new() -> Self {
         Self {
@@ -144,4 +149,5 @@ impl AtomicPidTuningInput {
 
 pub static SHARED_CONTROLLER_INPUT: AtomicControllerInput = AtomicControllerInput::new();
 pub static SHARED_TELEMETRY: AtomicTelemetry = AtomicTelemetry::new();
+#[cfg(feature = "wifi-tuning")]
 pub static SHARED_TUNING: AtomicPidTuningInput = AtomicPidTuningInput::new();
