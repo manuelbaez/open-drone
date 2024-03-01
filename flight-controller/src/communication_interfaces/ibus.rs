@@ -26,10 +26,7 @@ impl IbusCommands {
     pub const CHANNELS_DATA: u8 = 0x40; // Command is always 0x40
     pub const SENSORS_DISCOVER: u8 = 0x80; // Command discover sensor (lowest 4 bits are sensor)
     pub const POLL_SENSOR_TYPE: u8 = 0x90; // Command discover sensor type (lowest 4 bits are sensor)
-    pub const POLL_SENSOR_VALUE: u8 = 0xA0; // Command send sensor data (lowest 4 bits are sensor)
-    pub const SENSOR_DISCOVERED_RESPONSE_COMMAND: u8 = 0x04;
-    pub const SENSOR_VALUE_RESPONSE_COMMAND: u8 = 0x04;
-    pub const SENSOR_TYPE_RESPONSE_COMMAND: u8 = 0x06;
+    pub const MEASUREMENT: u8 = 0xA0; // Command send sensor data (lowest 4 bits are sensor)
 }
 enum ReadingStages {
     Length,
@@ -42,6 +39,7 @@ enum ReadingStages {
 pub struct IbusTelemetrySensorsIds;
 impl IbusTelemetrySensorsIds {
     pub const IBUS_SENSOR_TYPE_CELL: u8 = 0x04;
+    pub const IBUS_SENSOR_TYPE_EXTERNAL_VOLTAGE: u8 = 0x03;
 }
 
 #[repr(u8)]
@@ -179,12 +177,19 @@ impl<'a> IBusController<'a> {
         calculated_checksum
     }
 
-    fn append_message_checksum<const SIZE: usize>(message: [u8; SIZE]) -> [u8; SIZE + 2] {
-        let checksum = Self::calculate_message_checksum(&message);
-        let mut tx_buffer = [0; SIZE + 2];
-        tx_buffer[0..SIZE].copy_from_slice(&message);
-        tx_buffer[SIZE..(SIZE + 2)]
+    fn format_ibus_message<const SIZE: usize>(
+        payload: [u8; SIZE],
+    ) -> [u8; SIZE + PROTOCOL_OVERHEAD] {
+        let mut tx_buffer = [0; SIZE + PROTOCOL_OVERHEAD];
+        tx_buffer[0] = (SIZE + PROTOCOL_OVERHEAD) as u8;
+
+        tx_buffer[1..(SIZE + 1)].copy_from_slice(&payload);
+
+        //Add checksum
+        let checksum = Self::calculate_message_checksum(&tx_buffer[0..(SIZE + 1)]);
+        tx_buffer[(SIZE + 1)..(SIZE + PROTOCOL_OVERHEAD)]
             .copy_from_slice(&[(checksum & 0xff) as u8, ((checksum >> 8) & 0xff) as u8]);
+
         tx_buffer
     }
 
@@ -227,31 +232,26 @@ impl<'a> IBusController<'a> {
                         let mapped_command = ibus_packet_parsing_buffer[0] & 0xf0; //4 MS Bits of the read byte
                         match mapped_command {
                             IbusCommands::SENSORS_DISCOVER => {
-                                let message = [
-                                    IbusCommands::SENSOR_DISCOVERED_RESPONSE_COMMAND,
-                                    IbusCommands::SENSORS_DISCOVER + sensor_addr,
-                                ];
-                                let tx_buffer = Self::append_message_checksum(message);
+                                let message = [IbusCommands::SENSORS_DISCOVER + sensor_addr];
+                                let tx_buffer: [u8; 4] = Self::format_ibus_message(message);
                                 self.uart_driver.write(&tx_buffer).unwrap();
                             }
                             IbusCommands::POLL_SENSOR_TYPE => {
                                 let message = [
-                                    IbusCommands::SENSOR_TYPE_RESPONSE_COMMAND,
                                     IbusCommands::POLL_SENSOR_TYPE + sensor_addr,
-                                    IbusTelemetrySensorsIds::IBUS_SENSOR_TYPE_CELL,
+                                    IbusTelemetrySensorsIds::IBUS_SENSOR_TYPE_EXTERNAL_VOLTAGE,
                                     0x2, //Sensor data length
                                 ];
-                                let tx_buffer = Self::append_message_checksum(message);
+                                let tx_buffer: [u8; 6] = Self::format_ibus_message(message);
                                 self.uart_driver.write(&tx_buffer).unwrap();
                             }
-                            IbusCommands::POLL_SENSOR_VALUE => {
+                            IbusCommands::MEASUREMENT => {
                                 let message = [
-                                    IbusCommands::SENSOR_VALUE_RESPONSE_COMMAND + 0x2, //Sensor Data Length,
-                                    IbusCommands::POLL_SENSOR_VALUE + sensor_addr,
-                                    (36_u16 & 0x00ff) as u8, /*Sensor Value lower byte */
-                                    ((36_u16 >> 8) & 0x00ff) as u8, /*Sensor Value higher byte */
+                                    IbusCommands::MEASUREMENT + sensor_addr,
+                                    (1400_u16 & 0x00ff) as u8, /*Sensor Value lower byte */
+                                    ((1400_u16 >> 8) & 0x00ff) as u8, /*Sensor Value higher byte */
                                 ];
-                                let tx_buffer = Self::append_message_checksum(message);
+                                let tx_buffer: [u8; 6] = Self::format_ibus_message(message);
                                 self.uart_driver.write(&tx_buffer).unwrap();
                             }
                             _ => (),

@@ -1,6 +1,7 @@
 #![feature(trait_alias)]
 #![feature(ptr_metadata)]
 #![feature(const_float_bits_conv)]
+#![feature(generic_const_exprs)]
 
 mod communication_interfaces;
 mod control;
