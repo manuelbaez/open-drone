@@ -19,7 +19,6 @@ const PROTOCOL_CHANNELS: usize = 10;
 const CHANNEL_CENTER_POINT: u16 = 1500;
 const CHANNEL_MAX_POINT: u16 = 2000;
 const CHANNEL_MIN_POINT: u16 = 1000;
-const IBUS_MESSAGE_SIZE: usize = PROTOCOL_SIZE + PROTOCOL_OVERHEAD as usize;
 
 struct IbusCommands;
 impl IbusCommands {
@@ -27,13 +26,6 @@ impl IbusCommands {
     pub const SENSORS_DISCOVER: u8 = 0x80; // Command discover sensor (lowest 4 bits are sensor)
     pub const POLL_SENSOR_TYPE: u8 = 0x90; // Command discover sensor type (lowest 4 bits are sensor)
     pub const MEASUREMENT: u8 = 0xA0; // Command send sensor data (lowest 4 bits are sensor)
-}
-enum ReadingStages {
-    Length,
-    Data,
-    GetChecksumLByte,
-    GetChecksumHByte,
-    Discard,
 }
 
 pub struct IbusTelemetrySensorsIds;
@@ -198,6 +190,9 @@ impl<'a> IBusController<'a> {
         buffer: [u8; PROTOCOL_SIZE],
         shared_controller_input: &AtomicControllerInput,
     ) {
+        if buffer[0] < PROTOCOL_OVERHEAD as u8 || buffer[0] > PROTOCOL_SIZE as u8 {
+            return;
+        }
         let mut ibus_packet_parsing_buffer = [0_u8; PROTOCOL_SIZE];
         let current_message_length = buffer[0] as usize - PROTOCOL_OVERHEAD;
         //Copy message data to parsing buffer excluding the message length(Fist byte).
@@ -284,12 +279,12 @@ impl<'a> RemoteControl for IBusController<'a> {
             let mut current_index: usize = 0;
             let mut buffer_processed = false;
             loop {
-                if current_index < IBUS_MESSAGE_SIZE {
+                if current_index < PROTOCOL_SIZE {
                     raw_message_buffer[current_index] = read_buffer[0];
                 }
                 //Message read completed process the frame buffer
                 if !buffer_processed
-                    && (current_index >= (IBUS_MESSAGE_SIZE - 1)
+                    && (current_index >= (PROTOCOL_SIZE - 1)
                         || current_index >= (current_message_size - 1))
                 {
                     buffer_processed = true;
