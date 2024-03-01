@@ -1,7 +1,7 @@
 use super::controller::RemoteControl;
 use crate::shared_core_values::{AtomicControllerInput, AtomicTelemetry};
 use crate::util::time::get_current_system_time;
-use esp_idf_svc::hal::delay::{BLOCK, TICK_PERIOD_MS};
+use esp_idf_svc::hal::delay::BLOCK;
 use esp_idf_svc::hal::peripheral::Peripheral;
 use esp_idf_svc::hal::prelude::*;
 use esp_idf_svc::hal::{
@@ -14,7 +14,7 @@ use std::sync::atomic::Ordering;
 
 const PROTOCOL_MESSAGE_TIMEGAP_US: i64 = 3500;
 const PROTOCOL_SIZE: usize = 0x20;
-const PROTOCOL_OVERHEAD: u8 = 3; // <len><cmd><data....><chkl><chkh>
+const PROTOCOL_OVERHEAD: usize = 3; // <len><cmd><data....><chkl><chkh> this one accounts for len, and two checksum
 const PROTOCOL_CHANNELS: usize = 10;
 const CHANNEL_CENTER_POINT: u16 = 1500;
 const CHANNEL_MAX_POINT: u16 = 2000;
@@ -171,24 +171,46 @@ impl<'a> IBusController<'a> {
             .store(input_values.calibrate_sensors, Ordering::Relaxed);
     }
 
+    fn calculate_message_checksum(buffer: &[u8]) -> u16 {
+        let mut calculated_checksum = 0xffff_u16;
+        for byte in buffer.into_iter() {
+            calculated_checksum -= byte.clone() as u16;
+        }
+        calculated_checksum
+    }
+
+    fn append_message_checksum<const SIZE: usize>(message: [u8; SIZE]) -> [u8; SIZE + 2] {
+        let checksum = Self::calculate_message_checksum(&message);
+        let mut tx_buffer = [0; SIZE + 2];
+        tx_buffer[0..SIZE].copy_from_slice(&message);
+        tx_buffer[SIZE..(SIZE + 2)]
+            .copy_from_slice(&[(checksum & 0xff) as u8, ((checksum >> 8) & 0xff) as u8]);
+        tx_buffer
+    }
+
     fn process_ibus_buffer(
         &self,
-        buffer: [u8; PROTOCOL_SIZE + PROTOCOL_OVERHEAD as usize],
+        buffer: [u8; PROTOCOL_SIZE],
         shared_controller_input: &AtomicControllerInput,
     ) {
         let mut ibus_packet_parsing_buffer = [0_u8; PROTOCOL_SIZE];
-        let current_message_length = buffer[0] as usize;
-        //Copy message data to parsing buffer excluding the message length(Fist byte)
-        ibus_packet_parsing_buffer[0..(current_message_length - 1)]
-            .copy_from_slice(&buffer[1..current_message_length]);
+        let current_message_length = buffer[0] as usize - PROTOCOL_OVERHEAD;
+        //Copy message data to parsing buffer excluding the message length(Fist byte).
+        //Since the length and checksum are subtracted of the message length we just need
+        //to shift the slice one position to the right and that will get the whole message data
+        //without the checksum
+        ibus_packet_parsing_buffer[0..(current_message_length)]
+            .copy_from_slice(&buffer[1..current_message_length + 1]);
 
-        let checksum = (buffer[current_message_length - 1] as u16) << 8
-            | buffer[current_message_length - 2] as u16;
+        //Get the received message checksum, since the PROTOCOL_OVERHEAD was subtracted
+        //it's added back to get the message end
+        let checksum = (buffer[current_message_length + PROTOCOL_OVERHEAD - 1] as u16) << 8
+            | buffer[current_message_length + PROTOCOL_OVERHEAD - 2] as u16;
+
         //Vaidate checksum, add all bytes in the receive buffer except for the last two
-        let mut calculated_checksum = 0xffff_u16;
-        for byte in buffer[0..(current_message_length - 2)].into_iter() {
-            calculated_checksum -= byte.clone() as u16;
-        }
+        let calculated_checksum = Self::calculate_message_checksum(
+            &buffer[0..(current_message_length + PROTOCOL_OVERHEAD - 2)],
+        );
 
         if checksum == calculated_checksum {
             let message_command = ibus_packet_parsing_buffer[0];
@@ -199,104 +221,45 @@ impl<'a> IBusController<'a> {
                         shared_controller_input,
                     );
                 }
-                _ => (),
+                _ => {
+                    let sensor_addr: u8 = ibus_packet_parsing_buffer[0] & 0x0f; //4 LS Bits of the read byte
+                    if sensor_addr <= 1 && sensor_addr > 0 && current_message_length == 1 {
+                        let mapped_command = ibus_packet_parsing_buffer[0] & 0xf0; //4 MS Bits of the read byte
+                        match mapped_command {
+                            IbusCommands::SENSORS_DISCOVER => {
+                                let message = [
+                                    IbusCommands::SENSOR_DISCOVERED_RESPONSE_COMMAND,
+                                    IbusCommands::SENSORS_DISCOVER + sensor_addr,
+                                ];
+                                let tx_buffer = Self::append_message_checksum(message);
+                                self.uart_driver.write(&tx_buffer).unwrap();
+                            }
+                            IbusCommands::POLL_SENSOR_TYPE => {
+                                let message = [
+                                    IbusCommands::SENSOR_TYPE_RESPONSE_COMMAND,
+                                    IbusCommands::POLL_SENSOR_TYPE + sensor_addr,
+                                    IbusTelemetrySensorsIds::IBUS_SENSOR_TYPE_CELL,
+                                    0x2, //Sensor data length
+                                ];
+                                let tx_buffer = Self::append_message_checksum(message);
+                                self.uart_driver.write(&tx_buffer).unwrap();
+                            }
+                            IbusCommands::POLL_SENSOR_VALUE => {
+                                let message = [
+                                    IbusCommands::SENSOR_VALUE_RESPONSE_COMMAND + 0x2, //Sensor Data Length,
+                                    IbusCommands::POLL_SENSOR_VALUE + sensor_addr,
+                                    (36_u16 & 0x00ff) as u8, /*Sensor Value lower byte */
+                                    ((36_u16 >> 8) & 0x00ff) as u8, /*Sensor Value higher byte */
+                                ];
+                                let tx_buffer = Self::append_message_checksum(message);
+                                self.uart_driver.write(&tx_buffer).unwrap();
+                            }
+                            _ => (),
+                        }
+                    }
+                }
             }
         }
-
-        // let checksum_value = buffer[0..(current_message_length - 3)]
-        //     .into_iter()
-        //     .map(|number| number as u32)
-        //     .sum::<u32>();
-
-        //     for current_byte in buffer {
-        //         match state {
-        //             ReadingStages::Length => {
-        //                 current_byte_count = 0;
-        //                 if current_byte <= PROTOCOL_SIZE as u8 && current_byte > PROTOCOL_OVERHEAD {
-        //                     current_message_length = current_byte - PROTOCOL_OVERHEAD;
-        //                     state = ReadingStages::Data;
-        //                     target_checksum = 0xffff - current_byte as u32
-        //                 } else {
-        //                     state = ReadingStages::Discard;
-        //                 }
-        //             }
-        //             ReadingStages::Data => {
-        //                 if current_byte_count >= PROTOCOL_SIZE as u8 {
-        //                     state = ReadingStages::Discard;
-        //                     continue;
-        //                 }
-        //                 ibus_packet_parsing_buffer[current_byte_count as usize] = current_byte;
-        //                 target_checksum -= current_byte as u32;
-        //                 current_byte_count += 1;
-        //                 if current_byte_count >= current_message_length {
-        //                     state = ReadingStages::GetChecksumLByte;
-        //                 }
-        //             }
-        //             ReadingStages::GetChecksumLByte => {
-        //                 checksum = current_byte as u32;
-        //                 state = ReadingStages::GetChecksumHByte
-        //             }
-        //             ReadingStages::GetChecksumHByte => {
-        //                 checksum = ((current_byte as u16) << 8) as u32 + checksum as u32;
-        //                 if target_checksum == checksum {
-        //                     match ibus_packet_parsing_buffer[0] {
-        //                         IbusCommands::CHANNELS_DATA => {
-        //                             Self::process_ibus_channels_message(
-        //                                 ibus_packet_parsing_buffer,
-        //                                 shared_controller_input,
-        //                             );
-        //                         }
-        //                         _ => {
-        //                             let sensor_addr: u8 = ibus_packet_parsing_buffer[0] & 0x0f; //4 LS Bits of the read byte
-        //                             if sensor_addr <= 1
-        //                                 && sensor_addr > 0
-        //                                 && current_message_length == 1
-        //                             {
-        //                                 // println!("Polled Sensor");
-        //                                 let mapped_command = ibus_packet_parsing_buffer[0] & 0xf0; //4 MS Bits of the read byte
-        //                                 match mapped_command {
-        //                                     IbusCommands::SENSORS_DISCOVER => {
-        //                                         println!("Polled sensor");
-        //                                         self.uart_driver
-        //                                                 .write(&[
-        //                                                     IbusCommands::SENSOR_DISCOVERED_RESPONSE_COMMAND,
-        //                                                     IbusCommands::SENSORS_DISCOVER + sensor_addr,
-        //                                                 ])
-        //                                                 .unwrap();
-        //                                     }
-        //                                     IbusCommands::POLL_SENSOR_TYPE => {
-        //                                         self.uart_driver
-        //                                             .write(&[
-        //                                                 IbusCommands::SENSOR_TYPE_RESPONSE_COMMAND,
-        //                                                 IbusCommands::POLL_SENSOR_TYPE + sensor_addr,
-        //                                                 IbusTelemetrySensorsIds::IBUS_SENSOR_TYPE_CELL,
-        //                                                 0x2, //Sensor data lenth
-        //                                             ])
-        //                                             .unwrap();
-        //                                     }
-        //                                     IbusCommands::POLL_SENSOR_VALUE => {
-        //                                         self.uart_driver
-        //                                                 .write(&[
-        //                                                     IbusCommands::SENSOR_VALUE_RESPONSE_COMMAND + 0x2, //Sensor Data Length,
-        //                                                     IbusCommands::POLL_SENSOR_VALUE + sensor_addr,
-        //                                                     (35_u16 & 0x00ff) as u8, /*Sensor Value lower byte */
-        //                                                     ((35_u16 >> 8) & 0x00ff) as u8, /*Sensor Value higher byte */
-        //                                                 ])
-        //                                                 .unwrap();
-        //                                     }
-        //                                     _ => (),
-        //                                 }
-        //                             }
-        //                         }
-        //                     };
-        //                 }
-        //                 state = ReadingStages::Discard;
-        //             }
-        //             ReadingStages::Discard => {
-        //                 break;
-        //             }
-        //         }
-        //     }
     }
 }
 
@@ -316,7 +279,7 @@ impl<'a> RemoteControl for IBusController<'a> {
                 continue;
             }
 
-            let mut raw_message_buffer = [0_u8; PROTOCOL_SIZE + PROTOCOL_OVERHEAD as usize];
+            let mut raw_message_buffer = [0_u8; PROTOCOL_SIZE];
             let current_message_size: usize = read_buffer[0] as usize;
             let mut current_index: usize = 0;
             let mut buffer_processed = false;
