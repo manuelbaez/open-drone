@@ -141,18 +141,19 @@ pub fn measurements_thread() {
     let mut adc_driver = AdcDriver::new(adc, &Config::new()).unwrap();
 
     loop {
-        // Do multiple spaced out samples to get more stable reads
-        let mut sample: u16 = 0;
-        for _ in [0; 4] {
-            sample += adc_driver.read(&mut adc_pin).unwrap();
-            FreeRtos::delay_ms(20);
-        }
-        sample /= 4;
+        // Do multiple spaced out samples to get more stable reads, 
+        // apparently this is bad for the flight thread performance, seems to be allocated on core 1
+        // for _ in [0; 4] {
+        //     sample += adc_driver.read(&mut adc_pin).unwrap();
+        //     // FreeRtos::delay_ms(100);
+        // }
+        // sample /= 4;
 
+        let sample: u16 = adc_driver.read(&mut adc_pin).unwrap();
         let voltage = sample as f32 * MULTPLIER;
         SHARED_TELEMETRY
             .battery_voltage
             .store(voltage, Ordering::Relaxed);
-        FreeRtos::delay_ms(1000);
+        FreeRtos::delay_ms(2000);
     }
 }
