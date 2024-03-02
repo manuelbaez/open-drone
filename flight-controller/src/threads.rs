@@ -1,6 +1,14 @@
 use std::{ops::DerefMut, sync::atomic::Ordering};
 
-use esp_idf_svc::hal::delay::FreeRtos;
+use esp_idf_svc::{
+    hal::{
+        adc::{config::Config, AdcChannelDriver, AdcDriver},
+        delay::FreeRtos,
+        gpio::Gpio36,
+        peripheral::Peripheral,
+    },
+    sys::adc_atten_t_ADC_ATTEN_DB_11,
+};
 
 use crate::{
     config::constants::{
@@ -19,6 +27,10 @@ use crate::{
     util::vectors::{AccelerationVector3D, RotationVector3D},
     SHARED_PERIPHERALS,
 };
+
+const VOLTAGE_DIVIDER_MULTIPLIER: f32 = 9.648; // 999k + 119k
+const ADC_1_VOLT: u16 = 672_u16;
+const MULTPLIER: f32 = (1.0 / ADC_1_VOLT as f32) * VOLTAGE_DIVIDER_MULTIPLIER;
 
 pub fn flight_thread() {
     let controller_input_shared = &SHARED_CONTROLLER_INPUT;
@@ -114,5 +126,26 @@ pub fn telemetry_thread() {
             telemetry_data.throttle.load(Ordering::Relaxed),
         );
         FreeRtos::delay_ms(250);
+    }
+}
+
+pub fn measurements_thread() {
+    let mut peripherals_lock = SHARED_PERIPHERALS.lock().unwrap();
+    let adc = unsafe { peripherals_lock.adc1.clone_unchecked() };
+    let pin = unsafe { peripherals_lock.pins.gpio36.clone_unchecked() };
+    drop(peripherals_lock);
+
+    let mut adc_pin =
+        AdcChannelDriver::<'_, adc_atten_t_ADC_ATTEN_DB_11, Gpio36>::new(pin).unwrap();
+
+    let mut adc_driver = AdcDriver::new(adc, &Config::new()).unwrap();
+
+    loop {
+        let sample: u16 = adc_driver.read(&mut adc_pin).unwrap();
+        let voltage = sample as f32 * MULTPLIER;
+        SHARED_TELEMETRY
+            .battery_voltage
+            .store(voltage, Ordering::Relaxed);
+        FreeRtos::delay_ms(1000);
     }
 }

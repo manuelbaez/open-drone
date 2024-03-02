@@ -17,7 +17,7 @@ pub mod config {
 use crate::communication_interfaces::controller::{RemoteControl, RemoteTelemetry};
 use crate::communication_interfaces::i2c::*;
 use crate::shared_core_values::{SHARED_CONTROLLER_INPUT, SHARED_TELEMETRY};
-use crate::threads::{flight_thread, telemetry_thread};
+use crate::threads::{flight_thread, measurements_thread, telemetry_thread};
 use esp_idf_svc::hal::peripherals::Peripherals;
 use esp_idf_svc::sys::{vTaskDelete, xTaskCreatePinnedToCore};
 use once_cell::sync::Lazy;
@@ -35,8 +35,6 @@ use {
     crate::config::constants::WIFI_CONTROLLER_CHANNEL,
 };
 
-
-
 pub static SHARED_PERIPHERALS: Lazy<Mutex<Peripherals>> =
     Lazy::new(|| Mutex::new(Peripherals::take().unwrap()));
 
@@ -53,6 +51,9 @@ fn main() {
         telemetry_thread();
     });
 
+    let _measurements = std::thread::Builder::new().stack_size(4096).spawn(|| {
+        measurements_thread();
+    });
     log::info!("Running");
 
     unsafe {
