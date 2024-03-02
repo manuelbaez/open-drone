@@ -1,5 +1,6 @@
 use std::sync::atomic::{AtomicBool, AtomicI16, AtomicI32, AtomicU32, AtomicU8, Ordering};
 
+#[cfg(feature = "wifi-tuning")]
 use shared_definitions::controller::PIDTuneConfig;
 
 use crate::util::vectors::RotationVector3D;
@@ -9,9 +10,11 @@ impl AtomicF32 {
     pub const fn new(val: f32) -> Self {
         Self(AtomicU32::new(val.to_bits()))
     }
+    #[allow(dead_code)]
     pub fn load(&self, order: Ordering) -> f32 {
         f32::from_bits(self.0.load(order))
     }
+    #[allow(dead_code)]
     pub fn store(&self, val: f32, order: Ordering) {
         self.0.store(val.to_bits(), order)
     }
@@ -82,7 +85,7 @@ pub struct AtomicTelemetry {
     pub motor_3_power: AtomicU8,
     pub motor_4_power: AtomicU8,
     pub throttle: AtomicU8,
-    pub battery_avg_cell_voltage: AtomicF32,
+    pub battery_voltage: AtomicF32,
 }
 
 impl AtomicTelemetry {
@@ -95,7 +98,7 @@ impl AtomicTelemetry {
             motor_3_power: AtomicU8::new(0),
             motor_4_power: AtomicU8::new(0),
             throttle: AtomicU8::new(0),
-            battery_avg_cell_voltage: AtomicF32::new(0.0),
+            battery_voltage: AtomicF32::new(12.0),
         }
     }
 }

@@ -14,23 +14,28 @@ pub mod config {
     pub mod constants;
 }
 
-use crate::communication_interfaces::controller::RemoteControl;
+use crate::communication_interfaces::controller::{RemoteControl, RemoteTelemetry};
 use crate::communication_interfaces::i2c::*;
-#[cfg(feature = "ibus-controller")]
-use crate::communication_interfaces::ibus::IBusController;
-use crate::shared_core_values::SHARED_CONTROLLER_INPUT;
+use crate::shared_core_values::{SHARED_CONTROLLER_INPUT, SHARED_TELEMETRY};
 use crate::threads::{flight_thread, telemetry_thread};
+use esp_idf_svc::hal::peripherals::Peripherals;
+use esp_idf_svc::sys::{vTaskDelete, xTaskCreatePinnedToCore};
+use once_cell::sync::Lazy;
+use std::ops::DerefMut;
+use std::sync::Mutex;
+
+#[cfg(feature = "ibus-controller")]
+use {
+    crate::communication_interfaces::ibus::controller::IBusController,
+    crate::communication_interfaces::ibus::telemetry::IBusTelemetry,
+};
 #[cfg(any(feature = "wifi-controller", feature = "wifi-tuning"))]
 use {
     crate::communication_interfaces::wifi_control::WifiRemoteControl,
     crate::config::constants::WIFI_CONTROLLER_CHANNEL,
 };
 
-use esp_idf_svc::hal::peripherals::Peripherals;
-use esp_idf_svc::sys::{vTaskDelete, xTaskCreatePinnedToCore};
-use once_cell::sync::Lazy;
-use std::ops::DerefMut;
-use std::sync::Mutex;
+
 
 pub static SHARED_PERIPHERALS: Lazy<Mutex<Peripherals>> =
     Lazy::new(|| Mutex::new(Peripherals::take().unwrap()));
@@ -74,6 +79,13 @@ fn main() {
 
     #[cfg(all(not(feature = "wifi-controller"), feature = "ibus-controller"))]
     {
+        let _telemetry: Result<std::thread::JoinHandle<()>, std::io::Error> =
+            std::thread::Builder::new().stack_size(4096).spawn(|| {
+                let mut peripherals_lock = SHARED_PERIPHERALS.lock().unwrap();
+                let telemetry_controller = IBusTelemetry::new(peripherals_lock.deref_mut());
+                drop(peripherals_lock);
+                telemetry_controller.start_telemetry_tx_loop(&SHARED_TELEMETRY);
+            });
         let mut peripherals_lock = SHARED_PERIPHERALS.lock().unwrap();
         let controller = IBusController::new(peripherals_lock.deref_mut());
         drop(peripherals_lock);
