@@ -39,6 +39,7 @@ pub fn flight_thread() {
 
     let mut peripherals_lock = peripherals_shared.lock().unwrap();
     let i2c_driver = get_i2c_driver(peripherals_lock.deref_mut());
+    FreeRtos::delay_ms(50); //Wait for i2c to initialize
     let mut motors_manager = QuadcopterMotorsStateManager::new(peripherals_lock.deref_mut());
     drop(peripherals_lock);
 
@@ -141,7 +142,7 @@ pub fn measurements_thread() {
     let mut adc_driver = AdcDriver::new(adc, &Config::new()).unwrap();
 
     loop {
-        // Do multiple spaced out samples to get more stable reads, 
+        // Do multiple spaced out samples to get more stable reads,
         // apparently this is bad for the flight thread performance, seems to be allocated on core 1
         // for _ in [0; 4] {
         //     sample += adc_driver.read(&mut adc_pin).unwrap();

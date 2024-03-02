@@ -115,9 +115,9 @@ pub struct AtomicPidTuning {
 impl AtomicPidTuning {
     const fn default() -> Self {
         Self {
-            proportional: AtomicF32::new(0.2),
+            proportional: AtomicF32::new(0.3),
             integral: AtomicF32::new(0.0),
-            derivative: AtomicF32::new(0.0),
+            derivative: AtomicF32::new(0.07),
             max_integral: AtomicF32::new(20.0),
         }
     }
