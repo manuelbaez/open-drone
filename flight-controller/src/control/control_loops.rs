@@ -6,6 +6,7 @@ use shared_definitions::controller::ControllerInput;
 use crate::{
     config::constants::{
         ACCEL_UNCERTAINTY_DEG, GYRO_DRIFT_DEG, MAX_INCLINATION, MAX_ROTATION_RATE, MAX_THROTTLE,
+        MIN_POWER,
     },
     control::fligth_controllers::{
         AngleModeControllerInput, AngleModeFlightController, RotationRateControllerInput,
@@ -118,7 +119,9 @@ pub fn start_flight_controllers(
         let time_since_last_reading_seconds =
             (current_time_us - previous_time_us) as f32 / US_IN_SECOND;
 
-        let throttle: f32 = (input_values.throttle as f32 / u8::max_value() as f32) * MAX_THROTTLE;
+        let throttle: f32 = (input_values.throttle as f32 / u8::max_value() as f32)
+            * (MAX_THROTTLE - MIN_POWER)
+            + MIN_POWER;
         let desired_rotation = RotationVector3D {
             pitch: (input_values.pitch as f32 / i16::max_value() as f32) * MAX_INCLINATION,
             roll: (input_values.roll as f32 / i16::max_value() as f32) * MAX_INCLINATION,

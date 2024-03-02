@@ -16,7 +16,7 @@ pub const ACCEL_UNCERTAINTY_DEG: f32 = 3.0_f32;
 
 //Drone limits
 pub const MAX_ROTATION_RATE: f32 = 75.0_f32;
-pub const MIN_POWER: f32 = 15.0_f32;
+pub const MIN_POWER: f32 = 20.0_f32;
 pub const MAX_POWER_OVER_THROTTLE: f32 = 20.0_f32; //Throttle limit for the stabilizer
 pub const MAX_THROTTLE: f32 = 80.0_f32; // For the controller
 pub const MAX_INCLINATION: f32 = 45.0_f32;

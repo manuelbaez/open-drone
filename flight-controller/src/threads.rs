@@ -141,7 +141,14 @@ pub fn measurements_thread() {
     let mut adc_driver = AdcDriver::new(adc, &Config::new()).unwrap();
 
     loop {
-        let sample: u16 = adc_driver.read(&mut adc_pin).unwrap();
+        // Do multiple spaced out samples to get more stable reads
+        let mut sample: u16 = 0;
+        for _ in [0; 4] {
+            sample += adc_driver.read(&mut adc_pin).unwrap();
+            FreeRtos::delay_ms(20);
+        }
+        sample /= 4;
+
         let voltage = sample as f32 * MULTPLIER;
         SHARED_TELEMETRY
             .battery_voltage
