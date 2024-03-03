@@ -56,7 +56,7 @@ impl QuadcoperActuatorsValues {
         value
     }
 
-    fn get_constrained_to_valid_ranges(&self, min: f32, max: f32) -> Self {
+    fn get_constrained_to_range(&self, min: f32, max: f32) -> Self {
         Self {
             motor_front_left: Self::constraint_value(self.motor_front_left, min, max),
             motor_front_right: Self::constraint_value(self.motor_front_right, min, max),
@@ -68,14 +68,14 @@ impl QuadcoperActuatorsValues {
 
 pub struct Quadcopter {
     motor_min_power: f32,
-    motor_max_power_over_throttle: f32,
+    motor_max_power: f32,
 }
 
 impl Quadcopter {
-    pub fn new(motor_min_power: f32, motor_max_power_over_throttle: f32) -> Self {
+    pub fn new(motor_min_power: f32, motor_max_power: f32) -> Self {
         Self {
             motor_min_power,
-            motor_max_power_over_throttle,
+            motor_max_power,
         }
     }
 
@@ -118,9 +118,9 @@ impl FlyingVehicleMovementMapper<QuadcoperActuatorsValues> for Quadcopter {
         let roll_input = self.map_roll_to_motor_input(rotation_input.roll);
         let yaw_input = self.map_yaw_to_motor_input(rotation_input.yaw);
         let combined_output = motors_throttle + pitch_input + roll_input + yaw_input;
-        combined_output.get_constrained_to_valid_ranges(
+        combined_output.get_constrained_to_range(
             self.motor_min_power.clone(),
-            throttle + self.motor_max_power_over_throttle.clone(),
+            self.motor_max_power.clone(),
         )
     }
 }

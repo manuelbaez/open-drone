@@ -13,7 +13,7 @@ use esp_idf_svc::{
 use crate::{
     config::constants::{
         ACCEL_X_DEVIATION, ACCEL_Y_DEVIATION, ACCEL_Z_DEVIATION, GYRO_PITCH_CALIBRATION_DEG,
-        GYRO_ROLL_CALIBRATION_DEG, GYRO_YAW_CALIBRATION_DEG, MAX_POWER_OVER_THROTTLE, MIN_POWER,
+        GYRO_ROLL_CALIBRATION_DEG, GYRO_YAW_CALIBRATION_DEG, MAX_MOTOR_POWER, MIN_POWER,
         VEHICLE_TYPE,
     },
     control::control_loops::{start_flight_controllers, FlightStabilizerOutCommands},
@@ -61,7 +61,7 @@ pub fn flight_thread() {
 
     let output_handler = match VEHICLE_TYPE {
         VehicleTypesMapper::Quadcopter => {
-            let quadcoper_movement_mapper = Quadcopter::new(MIN_POWER, MAX_POWER_OVER_THROTTLE);
+            let quadcoper_movement_mapper = Quadcopter::new(MIN_POWER, MAX_MOTOR_POWER);
             move |result| match result {
                 FlightStabilizerOutCommands::KillMotors() => motors_manager.kill_motors(),
                 FlightStabilizerOutCommands::BypassThrottle(throttle) => {
