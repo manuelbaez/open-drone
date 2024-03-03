@@ -91,10 +91,10 @@ impl Div<f32> for RotationVector3D {
 }
 
 impl RotationVector3D {
-    pub fn from(vector_3d: &RotationVector2D) -> Self {
+    pub fn from(vector_2d: &RotationVector2D) -> Self {
         RotationVector3D {
-            roll: vector_3d.roll.clone(),
-            pitch: vector_3d.pitch.clone(),
+            roll: vector_2d.roll.clone(),
+            pitch: vector_2d.pitch.clone(),
             yaw: 0.0_f32,
         }
     }

@@ -4,7 +4,7 @@ use esp_idf_svc::{
     hal::{
         adc::{config::Config, AdcChannelDriver, AdcDriver},
         delay::FreeRtos,
-        gpio::Gpio36,
+        gpio::Gpio34,
         peripheral::Peripheral,
     },
     sys::adc_atten_t_ADC_ATTEN_DB_11,
@@ -133,11 +133,11 @@ pub fn telemetry_thread() {
 pub fn measurements_thread() {
     let mut peripherals_lock = SHARED_PERIPHERALS.lock().unwrap();
     let adc = unsafe { peripherals_lock.adc1.clone_unchecked() };
-    let pin = unsafe { peripherals_lock.pins.gpio36.clone_unchecked() };
+    let pin = unsafe { peripherals_lock.pins.gpio34.clone_unchecked() };
     drop(peripherals_lock);
 
     let mut adc_pin =
-        AdcChannelDriver::<'_, adc_atten_t_ADC_ATTEN_DB_11, Gpio36>::new(pin).unwrap();
+        AdcChannelDriver::<'_, adc_atten_t_ADC_ATTEN_DB_11, Gpio34>::new(pin).unwrap();
 
     let mut adc_driver = AdcDriver::new(adc, &Config::new()).unwrap();
 

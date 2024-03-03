@@ -154,8 +154,8 @@ where
     }
 
     fn map_gyro_out_to_vector(&self, gyro_data: Mpu6050GyroRegOut) -> RotationVector3D {
-        let pitch = gyro_data.x as f32 / self.gyro_sensitivity.sensitvity; // Pitch is rotation along the x axis
-        let roll = gyro_data.y as f32 / self.gyro_sensitivity.sensitvity; // Roll is rotation along the y axis
+        let roll = gyro_data.x as f32 / self.gyro_sensitivity.sensitvity; // Roll is rotation along the y axis
+        let pitch = -gyro_data.y as f32 / self.gyro_sensitivity.sensitvity; // Pitch is rotation along the x axis
         let yaw = gyro_data.z as f32 / self.gyro_sensitivity.sensitvity; // Yaw is rotation along the z axis
                                                                          // See right hand rule to understand how positive and negative rotation rates are measured.
         RotationVector3D { pitch, roll, yaw }
@@ -198,13 +198,13 @@ where
         acceleration_vector: AccelerationVector3D,
     ) -> RotationVector2D {
         let roll = atan2f(
-            -acceleration_vector.x,
-            sqrtf(acceleration_vector.y.powf(2.0) + acceleration_vector.z.powf(2.0)),
+            acceleration_vector.y,
+            sqrtf(acceleration_vector.x.powf(2.0) + acceleration_vector.z.powf(2.0)),
         );
 
         let pitch = atan2f(
-            acceleration_vector.y,
-            sqrtf(acceleration_vector.x.powf(2.0) + acceleration_vector.z.powf(2.0)),
+            acceleration_vector.x,
+            sqrtf(acceleration_vector.y.powf(2.0) + acceleration_vector.z.powf(2.0)),
         );
 
         RotationVector2D {
