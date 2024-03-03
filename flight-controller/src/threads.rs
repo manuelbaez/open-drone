@@ -74,10 +74,10 @@ pub fn flight_thread() {
                             state.rotation_output_command,
                         );
                     let mapped_to_motors_numbers = [
-                        quad_out.motor_rear_left,
-                        quad_out.motor_rear_right,
-                        quad_out.motor_front_left,
                         quad_out.motor_front_right,
+                        quad_out.motor_front_left,
+                        quad_out.motor_rear_right,
+                        quad_out.motor_rear_left,
                     ];
 
                     telemetry_shared
