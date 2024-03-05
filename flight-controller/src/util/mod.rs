@@ -1,3 +1,3 @@
 pub mod error;
-pub mod vectors;
+pub mod math;
 pub mod time;

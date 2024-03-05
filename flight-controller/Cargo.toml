@@ -7,11 +7,14 @@ resolver = "2"
 rust-version = "1.71"
 
 [profile.release]
-opt-level = "s"
+opt-level = 3
 
 [profile.dev]
-debug = true    # Symbols are nice and they don't increase the size on Flash
-opt-level = "z"
+debug = true  # Symbols are nice and they don't increase the size on Flash
+opt-level = 3
+
+# [profile.dev.package.esp-storage]
+# opt-level = 3
 
 [features]
 default = [
@@ -45,6 +48,9 @@ libwifi = "0.3.1"
 shared-definitions = { path = "../shared-definitions", features = ['wifi'] }
 bitfield-struct = "0.6.0"
 once_cell = "1.19.0"
+esp-storage = { version = "0.3.0", package = "esp-storage", features = [
+    'esp32',
+] }
 
 [build-dependencies]
 embuild = "0.31.3"

@@ -14,7 +14,7 @@ impl KalmanFilter {
             prediction_uncertainty: 0.0_f32,
         }
     }
-    pub fn update_next_prediction(
+    pub fn get_next_state_prediction(
         &mut self,
         current_rate: f32,
         measured_value: f32,
@@ -42,7 +42,7 @@ impl KalmanFilter {
     }
 
     #[allow(dead_code)]
-    pub fn get_current_state(&self) -> f32 {
+    pub fn get_current_state_prediction(&self) -> f32 {
         self.state_prediction
     }
 

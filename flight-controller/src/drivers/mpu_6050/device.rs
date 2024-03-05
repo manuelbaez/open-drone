@@ -1,10 +1,9 @@
 use embedded_hal::i2c::I2c;
 use esp_idf_svc::hal::{delay::FreeRtos, i2c::I2cError};
-use libm::{atan2f, sqrtf};
 
 use crate::{
     drivers::imu_sensors::{Accelerometer, CombinedGyroscopeAccelerometer, Gyroscope},
-    util::vectors::{AccelerationVector3D, RotationVector2D, RotationVector3D},
+    util::math::vectors::{AccelerationVector3D, RotationVector3D},
     I2cGenericDriver,
 };
 
@@ -191,26 +190,6 @@ where
 
     fn get_acceleration_vector(&mut self) -> AccelerationVector3D {
         self.get_acceleration_vector_uncalibrated() - self.accelerometer_calibration.clone()
-    }
-
-    fn get_roll_pitch_angles(
-        &mut self,
-        acceleration_vector: AccelerationVector3D,
-    ) -> RotationVector2D {
-        let roll = atan2f(
-            acceleration_vector.y,
-            sqrtf(acceleration_vector.x.powf(2.0) + acceleration_vector.z.powf(2.0)),
-        );
-
-        let pitch = atan2f(
-            acceleration_vector.x,
-            sqrtf(acceleration_vector.y.powf(2.0) + acceleration_vector.z.powf(2.0)),
-        );
-
-        RotationVector2D {
-            roll: roll.to_degrees(),
-            pitch: pitch.to_degrees(),
-        }
     }
 
     fn set_deviation_calibration(&mut self, claibration: AccelerationVector3D) {

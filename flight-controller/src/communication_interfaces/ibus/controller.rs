@@ -1,6 +1,6 @@
 use super::protocol::{
-    IBusMessageParser, IbusCommands, IbusTelemetrySensorsIds, CHANNEL_CENTER_POINT,
-    CHANNEL_MAX_POINT, CHANNEL_MIN_POINT, PROTOCOL_CHANNELS, PROTOCOL_OVERHEAD, PROTOCOL_SIZE,
+    IBusMessageParser, IbusCommands, CHANNEL_CENTER_POINT, CHANNEL_MAX_POINT, CHANNEL_MIN_POINT,
+    PROTOCOL_CHANNELS, PROTOCOL_OVERHEAD, PROTOCOL_SIZE,
 };
 use crate::communication_interfaces::controller::RemoteControl;
 use crate::shared_core_values::AtomicControllerInput;

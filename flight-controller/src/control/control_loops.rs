@@ -8,14 +8,14 @@ use crate::{
         ACCEL_UNCERTAINTY_DEG, GYRO_DRIFT_DEG, MAX_INCLINATION, MAX_ROTATION_RATE, MAX_THROTTLE,
         MIN_POWER,
     },
-    control::fligth_controllers::{
+    control::flight_controllers::{
         AngleModeControllerInput, AngleModeFlightController, RotationRateControllerInput,
         RotationRateFlightController,
     },
     shared_core_values::{AtomicControllerInput, AtomicTelemetry},
-    util::vectors::RotationVector2D,
+    util::math::vectors::RotationVector2D,
 };
-use crate::{drivers::imu_sensors::Accelerometer, util::vectors::RotationVector3D};
+use crate::{drivers::imu_sensors::Accelerometer, util::math::vectors::RotationVector3D};
 use crate::{
     drivers::{
         imu_sensors::{CombinedGyroscopeAccelerometer, Gyroscope},
@@ -129,7 +129,7 @@ pub fn start_flight_controllers(
         };
 
         let (rotation_rates, acceleration_vector) = imu.get_combined_gyro_accel_output();
-        let acceleration_angles = imu.get_roll_pitch_angles(acceleration_vector);
+        let acceleration_angles = acceleration_vector.calculate_orientation_angles();
 
         let angle_flight_controller_input = AngleModeControllerInput {
             measured_rotation_rate: RotationVector2D::from(&rotation_rates),

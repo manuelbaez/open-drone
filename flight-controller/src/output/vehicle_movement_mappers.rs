@@ -1,6 +1,6 @@
 use std::ops::Add;
 
-use crate::util::vectors::RotationVector3D;
+use crate::util::math::vectors::RotationVector3D;
 
 pub enum VehicleTypesMapper {
     Quadcopter,

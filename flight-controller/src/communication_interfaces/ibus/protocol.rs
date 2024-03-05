@@ -3,8 +3,8 @@ use esp_idf_svc::hal::{delay::BLOCK, uart::UartDriver};
 use crate::util::time::get_current_system_time;
 
 pub const PROTOCOL_MESSAGE_TIMEGAP_US: i64 = 3500;
-pub const PROTOCOL_SIZE: usize = 0x20;
-pub const PROTOCOL_OVERHEAD: usize = 3; // <len><cmd><data....><chkl><chkh> this one accounts for len, and two checksum
+pub const PROTOCOL_SIZE: usize = 0x20; // The max message length is 32 bytes
+pub const PROTOCOL_OVERHEAD: usize = 3; // <len><cmd><data....><chkl><chkh> this one accounts for len, and two checksum bytes
 pub const PROTOCOL_CHANNELS: usize = 10;
 pub const CHANNEL_CENTER_POINT: u16 = 1500;
 pub const CHANNEL_MAX_POINT: u16 = 2000;
@@ -12,9 +12,9 @@ pub const CHANNEL_MIN_POINT: u16 = 1000;
 
 pub struct IbusCommands;
 impl IbusCommands {
-    pub const CHANNELS_DATA: u8 = 0x40; // Command is always 0x40
-    pub const SENSORS_DISCOVER: u8 = 0x80; // Command discover sensor (lowest 4 bits are sensor)
-    pub const POLL_SENSOR_TYPE: u8 = 0x90; // Command discover sensor type (lowest 4 bits are sensor)
+    pub const CHANNELS_DATA: u8 = 0x40; // Data command is always 0x40
+    pub const SENSORS_DISCOVER: u8 = 0x80; // Command discover sensor (lowest 4 bits are the sensor number)
+    pub const POLL_SENSOR_TYPE: u8 = 0x90; // Command discover sensor type (lowest 4 bits are the sensor number)
     pub const MEASUREMENT: u8 = 0xA0; // Command send sensor data (lowest 4 bits are sensor)
 }
 

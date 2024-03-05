@@ -1,12 +1,8 @@
-use crate::util::vectors::{AccelerationVector3D, RotationVector2D, RotationVector3D};
+use crate::util::math::vectors::{AccelerationVector3D, RotationVector3D};
 
 pub trait Accelerometer {
     fn get_acceleration_vector_uncalibrated(&mut self) -> AccelerationVector3D;
     fn get_acceleration_vector(&mut self) -> AccelerationVector3D;
-    fn get_roll_pitch_angles(
-        &mut self,
-        acceleration_vector: AccelerationVector3D,
-    ) -> RotationVector2D;
     ///To run this the accelerometer must be in a completely horizontal surface
     fn calculate_deviation_average(&mut self) -> AccelerationVector3D {
         let mut acceleration_accumulator = AccelerationVector3D::default();

@@ -1,6 +1,6 @@
 use shared_definitions::controller::PIDTuneInput;
 
-use crate::util::vectors::{RotationVector2D, RotationVector3D};
+use crate::util::math::vectors::{RotationVector2D, RotationVector3D};
 
 use super::{kalman_filter::KalmanFilter, pid::PID};
 
@@ -102,13 +102,13 @@ impl AngleModeFlightController {
     }
 
     pub fn get_next_output(&mut self, input: AngleModeControllerInput) -> RotationVector2D {
-        let estimated_roll = self.roll_kalman_filter.update_next_prediction(
+        let estimated_roll = self.roll_kalman_filter.get_next_state_prediction(
             input.measured_rotation_rate.roll,
             input.measured_rotation.roll,
             input.iteration_time,
         );
 
-        let estimated_pitch = self.pitch_kalman_filter.update_next_prediction(
+        let estimated_pitch = self.pitch_kalman_filter.get_next_state_prediction(
             input.measured_rotation_rate.pitch,
             input.measured_rotation.pitch,
             input.iteration_time,
@@ -143,8 +143,8 @@ impl AngleModeFlightController {
     #[allow(dead_code)]
     pub fn get_current_kalman_predicted_state(&self) -> RotationVector2D {
         RotationVector2D {
-            roll: self.roll_kalman_filter.get_current_state(),
-            pitch: self.pitch_kalman_filter.get_current_state(),
+            roll: self.roll_kalman_filter.get_current_state_prediction(),
+            pitch: self.pitch_kalman_filter.get_current_state_prediction(),
         }
     }
 }

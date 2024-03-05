@@ -24,7 +24,7 @@ use crate::{
         vehicle_movement_mappers::{FlyingVehicleMovementMapper, Quadcopter, VehicleTypesMapper},
     },
     shared_core_values::{SHARED_CONTROLLER_INPUT, SHARED_TELEMETRY},
-    util::vectors::{AccelerationVector3D, RotationVector3D},
+    util::math::vectors::{AccelerationVector3D, RotationVector3D},
     SHARED_PERIPHERALS,
 };
 

@@ -3,7 +3,7 @@ use std::sync::atomic::{AtomicBool, AtomicI16, AtomicI32, AtomicU32, AtomicU8, O
 #[cfg(feature = "wifi-tuning")]
 use shared_definitions::controller::PIDTuneConfig;
 
-use crate::util::vectors::RotationVector3D;
+use crate::util::math::vectors::RotationVector3D;
 
 pub struct AtomicF32(AtomicU32);
 impl AtomicF32 {

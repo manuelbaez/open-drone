@@ -1,10 +1,24 @@
 use std::ops::{Add, AddAssign, Div, Sub};
 
+use libm::{atan2f, sqrtf};
+
 #[derive(Debug, Default, Clone)]
 pub struct AccelerationVector3D {
     pub x: f32,
     pub y: f32,
     pub z: f32,
+}
+
+impl AccelerationVector3D {
+    pub fn calculate_orientation_angles(&self) -> RotationVector2D {
+        let roll = atan2f(self.y, sqrtf(self.x.powf(2.0) + self.z.powf(2.0)));
+        let pitch = atan2f(self.x, sqrtf(self.y.powf(2.0) + self.z.powf(2.0)));
+
+        RotationVector2D {
+            roll: roll.to_degrees(),
+            pitch: pitch.to_degrees(),
+        }
+    }
 }
 
 impl Sub<AccelerationVector3D> for AccelerationVector3D {
