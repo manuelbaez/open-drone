@@ -22,6 +22,10 @@ impl KalmanFilter {
     ) -> f32 {
         let mut prediction_uncertainty = self.prediction_uncertainty.clone();
 
+        //State prediction for change rate, this could be different for a different kind of system as this is simply
+        //a model state prediction based on the inputs available(gyro, this could also be a model of the quadcopter dynamics
+        //using motor thrust... but that's unnecesary and too complicated since the gyro can provide a really good measurement 
+        //of the system state change).
         let mut state_prediction = self.state_prediction + t_interval_seconds * current_rate as f32;
 
         prediction_uncertainty =

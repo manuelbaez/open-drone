@@ -21,11 +21,11 @@ struct Mpu6050CombinedOutReg {
     gyroscope: Mpu6050GyroRegOut,
 }
 
-pub struct MPU6050Sensor<I>
+pub struct MPU6050Sensor<'a, I>
 where
     I: I2c<Error = I2cError>,
 {
-    i2c_driver: I,
+    i2c_driver: &'a mut I,
     mpu_addr: u8,
     accel_sensitivity: MpuAccelSensitivityRanges,
     gyro_sensitivity: MpuGyroSensitivityRanges,
@@ -34,12 +34,12 @@ where
     low_pass_filter_freq: LowPassFrequencyValues,
 }
 
-impl<I> MPU6050Sensor<I>
+impl<'a, I> MPU6050Sensor<'a, I>
 where
     I: I2c<Error = I2cError>,
 {
     pub fn new(
-        i2c_driver: I,
+        i2c_driver: &'a mut I,
         gyro_drift_calibration: RotationVector3D,
         accelerometer_calibration: AccelerationVector3D,
     ) -> Self {
@@ -179,7 +179,7 @@ where
     }
 }
 
-impl<I> Accelerometer for MPU6050Sensor<I>
+impl<'a, I> Accelerometer for MPU6050Sensor<'a, I>
 where
     I: I2cGenericDriver,
 {
@@ -197,7 +197,7 @@ where
     }
 }
 
-impl<I> Gyroscope for MPU6050Sensor<I>
+impl<'a, I> Gyroscope for MPU6050Sensor<'a, I>
 where
     I: I2cGenericDriver,
 {
@@ -215,7 +215,7 @@ where
     }
 }
 
-impl<I> CombinedGyroscopeAccelerometer for MPU6050Sensor<I>
+impl<'a, I> CombinedGyroscopeAccelerometer for MPU6050Sensor<'a, I>
 where
     I: I2cGenericDriver,
 {

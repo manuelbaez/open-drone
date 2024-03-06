@@ -38,7 +38,7 @@ pub fn flight_thread() {
     let peripherals_shared = &SHARED_PERIPHERALS;
 
     let mut peripherals_lock = peripherals_shared.lock().unwrap();
-    let i2c_driver = get_i2c_driver(peripherals_lock.deref_mut());
+    let mut i2c_driver = get_i2c_driver(peripherals_lock.deref_mut());
     FreeRtos::delay_ms(50); //Wait for i2c to initialize
     let mut motors_manager = QuadcopterMotorsStateManager::new(peripherals_lock.deref_mut());
     drop(peripherals_lock);
@@ -55,7 +55,7 @@ pub fn flight_thread() {
         yaw: GYRO_YAW_CALIBRATION_DEG,
     };
 
-    let mut imu = MPU6050Sensor::new(i2c_driver, gyro_calibration, acceleromenter_calibration);
+    let mut imu = MPU6050Sensor::new(&mut i2c_driver, gyro_calibration, acceleromenter_calibration);
     imu.enable_low_pass_filter(LowPassFrequencyValues::Freq10Hz);
     imu.init();
 
