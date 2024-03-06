@@ -4,15 +4,13 @@
 #![feature(generic_const_exprs)]
 
 mod communication_interfaces;
+mod config;
 mod control;
 mod drivers;
 mod output;
 mod shared_core_values;
 mod threads;
 mod util;
-pub mod config {
-    pub mod constants;
-}
 
 use crate::communication_interfaces::controller::{RemoteControl, RemoteTelemetry};
 use crate::communication_interfaces::i2c::*;
@@ -29,7 +27,7 @@ use {
     crate::communication_interfaces::ibus::controller::IBusController,
     crate::communication_interfaces::ibus::telemetry::IBusTelemetry,
 };
-#[cfg(any(feature = "wifi-controller", feature = "wifi-tuning"))]
+#[cfg(feature = "wifi")]
 use {
     crate::communication_interfaces::wifi_control::WifiRemoteControl,
     crate::config::constants::WIFI_CONTROLLER_CHANNEL,

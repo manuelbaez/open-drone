@@ -11,12 +11,11 @@ use esp_idf_svc::{
 };
 
 use crate::{
-    config::constants::{
-        ACCEL_X_DEVIATION, ACCEL_Y_DEVIATION, ACCEL_Z_DEVIATION, GYRO_PITCH_CALIBRATION_DEG,
-        GYRO_ROLL_CALIBRATION_DEG, GYRO_YAW_CALIBRATION_DEG, MAX_MOTOR_POWER, MIN_POWER,
-        VEHICLE_TYPE,
+    config::{
+        constants::{MAX_MOTOR_POWER, MIN_POWER, VEHICLE_TYPE},
+        store::{AppStoredConfig, APP_CONFIG_STORE},
     },
-    control::control_loops::{start_flight_controllers, FlightStabilizerOutCommands},
+    control::control_loops::{start_flight_controllers, MainControlLoopOutCommands},
     drivers::mpu_6050::{device::MPU6050Sensor, registers::LowPassFrequencyValues},
     get_i2c_driver,
     output::{
@@ -24,7 +23,6 @@ use crate::{
         vehicle_movement_mappers::{FlyingVehicleMovementMapper, Quadcopter, VehicleTypesMapper},
     },
     shared_core_values::{SHARED_CONTROLLER_INPUT, SHARED_TELEMETRY},
-    util::math::vectors::{AccelerationVector3D, RotationVector3D},
     SHARED_PERIPHERALS,
 };
 
@@ -43,19 +41,19 @@ pub fn flight_thread() {
     let mut motors_manager = QuadcopterMotorsStateManager::new(peripherals_lock.deref_mut());
     drop(peripherals_lock);
 
-    let acceleromenter_calibration = AccelerationVector3D {
-        x: ACCEL_X_DEVIATION,
-        y: ACCEL_Y_DEVIATION,
-        z: ACCEL_Z_DEVIATION,
-    };
+    let mut config_lock = APP_CONFIG_STORE.lock().unwrap();
+    let config = config_lock.load_from_flash();
+    drop(config_lock);
 
-    let gyro_calibration = RotationVector3D {
-        roll: GYRO_ROLL_CALIBRATION_DEG,
-        pitch: GYRO_PITCH_CALIBRATION_DEG,
-        yaw: GYRO_YAW_CALIBRATION_DEG,
-    };
+    let acceleromenter_calibration = config.accelerometer_calibration.clone();
 
-    let mut imu = MPU6050Sensor::new(&mut i2c_driver, gyro_calibration, acceleromenter_calibration);
+    let gyro_calibration = config.gyro_calibration.clone();
+
+    let mut imu = MPU6050Sensor::new(
+        &mut i2c_driver,
+        gyro_calibration,
+        acceleromenter_calibration,
+    );
     imu.enable_low_pass_filter(LowPassFrequencyValues::Freq10Hz);
     imu.init();
 
@@ -63,11 +61,20 @@ pub fn flight_thread() {
         VehicleTypesMapper::Quadcopter => {
             let quadcoper_movement_mapper = Quadcopter::new(MIN_POWER, MAX_MOTOR_POWER);
             move |result| match result {
-                FlightStabilizerOutCommands::KillMotors() => motors_manager.kill_motors(),
-                FlightStabilizerOutCommands::BypassThrottle(throttle) => {
+                MainControlLoopOutCommands::KillMotors => motors_manager.kill_motors(),
+                MainControlLoopOutCommands::BypassThrottle(throttle) => {
                     motors_manager.set_motor_power([throttle; 4]);
                 }
-                FlightStabilizerOutCommands::UpdateFlightState(state) => {
+                MainControlLoopOutCommands::StoreSensorsCalibration(accelerometer, gyro) => {
+                    let mut config_lock = APP_CONFIG_STORE.lock().unwrap();
+                    let config = AppStoredConfig {
+                        accelerometer_calibration: accelerometer,
+                        gyro_calibration: gyro,
+                    };
+                    config_lock.store_to_flash(config);
+                    drop(config_lock);
+                }
+                MainControlLoopOutCommands::UpdateFlightState(state) => {
                     let quad_out = quadcoper_movement_mapper
                         .map_controller_output_to_actuators_input(
                             state.throttle,

@@ -13,7 +13,7 @@ use crate::{
         RotationRateFlightController,
     },
     shared_core_values::{AtomicControllerInput, AtomicTelemetry},
-    util::math::vectors::RotationVector2D,
+    util::math::vectors::{AccelerationVector3D, RotationVector2D},
 };
 use crate::{drivers::imu_sensors::Accelerometer, util::math::vectors::RotationVector3D};
 use crate::{
@@ -28,10 +28,11 @@ use {crate::shared_core_values::SHARED_TUNING, shared_definitions::controller::P
 
 const US_IN_SECOND: f32 = 1_000_000.0_f32;
 
-pub enum FlightStabilizerOutCommands {
-    KillMotors(),
+pub enum MainControlLoopOutCommands {
+    KillMotors,
     UpdateFlightState(FlightStabilizerOut),
     BypassThrottle(f32),
+    StoreSensorsCalibration(AccelerationVector3D, RotationVector3D),
 }
 
 #[derive(Debug)]
@@ -44,7 +45,7 @@ pub fn start_flight_controllers(
     controller_input: &AtomicControllerInput,
     mut imu: MPU6050Sensor<I2cDriver<'_>>,
     telemetry_data: &AtomicTelemetry,
-    mut controllers_out_callback: impl FnMut(FlightStabilizerOutCommands) -> (),
+    mut controllers_out_callback: impl FnMut(MainControlLoopOutCommands) -> (),
 ) {
     let mut previous_time_us = 0_i64;
 
@@ -81,7 +82,7 @@ pub fn start_flight_controllers(
             true => {
                 if input_values.kill_motors {
                     drone_on = false;
-                    controllers_out_callback(FlightStabilizerOutCommands::KillMotors());
+                    controllers_out_callback(MainControlLoopOutCommands::KillMotors);
                     continue;
                 }
             }
@@ -92,21 +93,25 @@ pub fn start_flight_controllers(
                 }
 
                 if input_values.calibrate_esc {
-                    controllers_out_callback(FlightStabilizerOutCommands::BypassThrottle(
+                    controllers_out_callback(MainControlLoopOutCommands::BypassThrottle(
                         (input_values.throttle as f32 / u8::max_value() as f32) * 100.0_f32,
                     ));
                 }
 
                 if input_values.calibrate_sensors {
                     log::info!("Calibrating gyro");
-                    let calibration_values = imu.calculate_drift_average();
-                    imu.set_drift_calibration(calibration_values);
+                    let gyro_calibration_values = imu.calculate_drift_average();
+                    imu.set_drift_calibration(gyro_calibration_values.clone());
                     log::info!("Gyro calibrated");
 
                     log::info!("Calibrating Accelerometer");
-                    let calibration_values = imu.calculate_deviation_average();
-                    imu.set_deviation_calibration(calibration_values);
+                    let accel_calibration_values = imu.calculate_deviation_average();
+                    imu.set_deviation_calibration(accel_calibration_values.clone());
                     log::info!("Accelerometer calibrated");
+                    controllers_out_callback(MainControlLoopOutCommands::StoreSensorsCalibration(
+                        accel_calibration_values,
+                        gyro_calibration_values,
+                    ))
                 }
 
                 FreeRtos::delay_ms(5);
@@ -125,7 +130,7 @@ pub fn start_flight_controllers(
         let desired_rotation = RotationVector3D {
             pitch: (input_values.pitch as f32 / i16::max_value() as f32) * MAX_INCLINATION,
             roll: (input_values.roll as f32 / i16::max_value() as f32) * MAX_INCLINATION,
-            yaw: -(input_values.yaw as f32 / i16::max_value() as f32) * MAX_ROTATION_RATE, //My controller is inverted, probably should do that there lol
+            yaw: -(input_values.yaw as f32 / i16::max_value() as f32) * MAX_ROTATION_RATE, //My controller is inverted, probably shouldn't do that there lol
         };
 
         let (rotation_rates, acceleration_vector) = imu.get_combined_gyro_accel_output();
@@ -165,7 +170,7 @@ pub fn start_flight_controllers(
 
         previous_time_us = current_time_us;
 
-        controllers_out_callback(FlightStabilizerOutCommands::UpdateFlightState(
+        controllers_out_callback(MainControlLoopOutCommands::UpdateFlightState(
             FlightStabilizerOut {
                 rotation_output_command: controller_output,
                 throttle,

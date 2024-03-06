@@ -1,14 +1,14 @@
 use crate::output::vehicle_movement_mappers::VehicleTypesMapper;
 
-// Gyroscope Drift Calibrations
-pub const GYRO_PITCH_CALIBRATION_DEG: f32 = -1.9987461681754335;
-pub const GYRO_ROLL_CALIBRATION_DEG: f32 = -0.03329770963243634;
-pub const GYRO_YAW_CALIBRATION_DEG: f32 = -0.06639503742574737;
+// // Gyroscope Drift Calibrations
+// pub const GYRO_PITCH_CALIBRATION_DEG: f32 = -1.9987461681754335;
+// pub const GYRO_ROLL_CALIBRATION_DEG: f32 = -0.03329770963243634;
+// pub const GYRO_YAW_CALIBRATION_DEG: f32 = -0.06639503742574737;
 
-//Accelerometer Calibration
-pub const ACCEL_X_DEVIATION: f32 = 0.045;
-pub const ACCEL_Y_DEVIATION: f32 = 0.06;
-pub const ACCEL_Z_DEVIATION: f32 = 0.03;
+// //Accelerometer Calibration
+// pub const ACCEL_X_DEVIATION: f32 = 0.045;
+// pub const ACCEL_Y_DEVIATION: f32 = 0.06;
+// pub const ACCEL_Z_DEVIATION: f32 = 0.03;
 
 // For kalmal filters purposes
 pub const GYRO_DRIFT_DEG: f32 = 3.0_f32;
