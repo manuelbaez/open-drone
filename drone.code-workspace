@@ -9,8 +9,16 @@
       "path": "./flight-controller"
     },
     {
-      "name": "Controller",
+      "name": "Flight Controller nostd",
+      "path": "./flight-controller-nostd"
+    },
+    {
+      "name": "Wifi Controller",
       "path": "./controller-transmitter"
+    },
+    {
+      "name": "Video Transmitter",
+      "path": "./video-transmitter"
     },
     {
       "name": "Shared Definitions",
