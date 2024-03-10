@@ -2,8 +2,9 @@ use crate::{
     drivers::imu_sensors::{Accelerometer, CombinedGyroscopeAccelerometer, Gyroscope},
     util::math::vectors::{AccelerationVector3D, RotationVector3D},
 };
-use embassy_time::Delay;
+use embassy_time::{Duration, Timer};
 use embedded_hal::i2c::I2c;
+use esp32_hal::i2c::{self, I2C};
 
 use super::registers::{
     AccelGyroConfigRegister, LowPassFrequencyValues, MPURegisters, Mpu6050AccelRegOut,
@@ -21,9 +22,9 @@ struct Mpu6050CombinedOutReg {
 
 pub struct MPU6050Sensor<'a, I>
 where
-    I: I2c,
+    I: i2c::Instance,
 {
-    i2c_driver: &'a mut I,
+    i2c_driver: &'a mut I2C<'a, I>,
     mpu_addr: u8,
     accel_sensitivity: MpuAccelSensitivityRanges,
     gyro_sensitivity: MpuGyroSensitivityRanges,
@@ -34,10 +35,10 @@ where
 
 impl<'a, I> MPU6050Sensor<'a, I>
 where
-    I: I2c,
+    I: i2c::Instance,
 {
     pub fn new(
-        i2c_driver: &'a mut I,
+        i2c_driver: &'a mut I2C<'a, I>,
         gyro_drift_calibration: RotationVector3D,
         accelerometer_calibration: AccelerationVector3D,
     ) -> Self {
@@ -52,20 +53,20 @@ where
         }
     }
 
-    pub fn init(&mut self) {
-        Delay::delay_ms(50);
+    pub async fn init(&mut self) {
+        Timer::after(Duration::from_millis(50)).await;
         self.update_gyro_config_register();
-        Delay::delay_ms(50);
+        Timer::after(Duration::from_millis(50)).await;
         self.update_accel_config_register();
-        Delay::delay_ms(50);
+        Timer::after(Duration::from_millis(50)).await;
         self.set_power_management_register_default();
-        Delay::delay_ms(500);
+        Timer::after(Duration::from_millis(500)).await;
         self.update_dlpf_filter_register();
-        Delay::delay_ms(50);
+        Timer::after(Duration::from_millis(50)).await;
     }
 
     pub fn enable_low_pass_filter(&mut self, low_pass_freq: LowPassFrequencyValues) {
-        log::info!(
+        esp_println::println!(
             "Set mpu low pass filter {:02x?}",
             low_pass_freq.clone() as u8
         );
@@ -113,7 +114,7 @@ where
         };
         let buffer = [MPURegisters::CONFIG, reg_value];
         self.i2c_driver.write(self.mpu_addr, &buffer).unwrap(); //Set to 10hz
-        log::info!("Set mpu low pass filter {:02x?}", buffer);
+        esp_println::println!("Set mpu low pass filter {:02x?}", buffer);
     }
 
     fn get_accel_data(&mut self) -> Mpu6050AccelRegOut {
@@ -179,7 +180,7 @@ where
 
 impl<'a, I> Accelerometer for MPU6050Sensor<'a, I>
 where
-    I: I2c,
+    I: i2c::Instance,
 {
     fn get_acceleration_vector_uncalibrated(&mut self) -> AccelerationVector3D {
         let acc_values = self.get_accel_data();
@@ -197,7 +198,7 @@ where
 
 impl<'a, I> Gyroscope for MPU6050Sensor<'a, I>
 where
-    I: I2c,
+    I: i2c::Instance,
 {
     fn get_rotation_rates_uncalibrated(&mut self) -> RotationVector3D {
         let gyro_data = self.get_gyro_data();
@@ -215,7 +216,7 @@ where
 
 impl<'a, I> CombinedGyroscopeAccelerometer for MPU6050Sensor<'a, I>
 where
-    I: I2c,
+    I: i2c::Instance,
 {
     fn get_combined_gyro_accel_output(&mut self) -> (RotationVector3D, AccelerationVector3D) {
         let mut gyro_output = Mpu6050GyroRegOut::default();
