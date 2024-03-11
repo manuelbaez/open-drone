@@ -24,6 +24,7 @@ mod drivers;
 mod output;
 mod shared_core_values;
 mod util;
+mod control;
 
 #[main]
 async fn main(spawner: Spawner) {

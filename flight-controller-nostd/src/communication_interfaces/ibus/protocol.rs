@@ -1,6 +1,8 @@
 use embassy_time::{Duration, Instant, Timer};
 use esp32_hal::{prelude::*, uart};
 
+use crate::util::time::get_current_system_time_us;
+
 pub const PROTOCOL_MESSAGE_TIMEGAP_US: u64 = 3500_u64;
 pub const PROTOCOL_SIZE: usize = 0x20; // The max message length is 32 bytes
 pub const PROTOCOL_OVERHEAD: usize = 3; // <len><cmd><data....><chkl><chkh> this one accounts for len, and two checksum bytes
@@ -86,7 +88,7 @@ impl IBusMessageParser {
         uart_driver: &mut uart::Uart<'a, T>,
         mut message_callback: impl FnMut([u8; PROTOCOL_SIZE - PROTOCOL_OVERHEAD], usize) -> (),
     ) -> ! {
-        let mut previous_time = Instant::now().as_micros();
+        let mut previous_time = get_current_system_time_us();
         loop {
             if T::get_rx_fifo_count() == 0 {
                 Timer::after(Duration::from_micros(250)).await;
@@ -94,7 +96,7 @@ impl IBusMessageParser {
             };
             let mut read_byte = uart_driver.read().unwrap();
 
-            let current_time = Instant::now().as_micros();
+            let current_time = get_current_system_time_us();
             let elapsed_time = current_time - previous_time;
             previous_time = current_time;
 
@@ -147,7 +149,7 @@ where
         message_size: usize,
     );
     async fn start_monitor_on_uart<'a>(&mut self) -> ! {
-        let mut previous_time = Instant::now().as_micros();
+        let mut previous_time = get_current_system_time_us();
         loop {
             if self.get_read_buffer_count() == 0 {
                 Timer::after(Duration::from_micros(250)).await;
@@ -155,7 +157,7 @@ where
             };
             let mut read_byte = self.read_uart_byte().unwrap();
 
-            let current_time = Instant::now().as_micros();
+            let current_time = get_current_system_time_us();
             let elapsed_time = current_time - previous_time;
             previous_time = current_time;
 
