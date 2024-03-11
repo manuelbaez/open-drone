@@ -17,7 +17,7 @@ pub struct QuadcopterMotorsStateManager<'a> {
 }
 
 impl<'a> QuadcopterMotorsStateManager<'a> {
-    pub fn new(io: &'a mut IO, ledc_driver: &'a LEDC<'a>, timer: &'a Timer<'a, HighSpeed>) -> Self {
+    pub fn new(io: &mut IO, ledc_driver: &'a LEDC<'a>, timer: &'a Timer<'a, HighSpeed>) -> Self {
         let motor_1_controller = MotorController::new(
             ledc_driver,
             timer,

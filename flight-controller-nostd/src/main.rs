@@ -1,27 +1,24 @@
 #![no_std]
 #![no_main]
 #![feature(const_float_bits_conv)]
+#![feature(generic_const_exprs)]
 
-use config::constants::{ESC_PWM_FREQUENCY_HZ, MIN_MOTOR_DUTY};
+use config::constants::ESC_PWM_FREQUENCY_HZ;
 use embassy_executor::Spawner;
 use embassy_time::{Duration, Timer};
 use esp32_hal::{
     clock::ClockControl,
     embassy,
-    ledc::{
-        self,
-        channel::{self, config::PinConfig},
-        timer, HighSpeed, LSGlobalClkSource, LEDC,
-    },
+    gpio::Pins,
+    ledc::{self, timer, LSGlobalClkSource, LEDC},
     peripheral::Peripheral,
     peripherals::Peripherals,
     prelude::*,
-    IO,
+    uart, Uart, IO,
 };
 use esp_backtrace as _;
 use output::motors_state_manager::QuadcopterMotorsStateManager;
 
-use crate::config::constants::MAX_MOTOR_DUTY;
 // mod communication_interfaces;
 mod config;
 mod drivers;
@@ -60,6 +57,13 @@ async fn main(spawner: Spawner) {
         .unwrap();
 
     let mut motors_manager = QuadcopterMotorsStateManager::new(&mut io, &ledc_driver, &timer);
+
+    //uart sample code
+    let uart_config = uart::config::Config::default();
+    let uart_pins = uart::TxRxPins::new_tx_rx(io.pins.gpio11, io.pins.gpio19);
+    let mut uart = Uart::new_with_config(peripherals.UART2, uart_config, Some(uart_pins), &clocks);
+    let byte = uart.read().unwrap();
+
     let mut count = 0;
     loop {
         esp_println::println!("Main Task Count: {}", count);

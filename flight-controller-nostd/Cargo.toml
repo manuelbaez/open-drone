@@ -20,6 +20,7 @@ esp32-hal = { version = "0.18.0", features = [
     "async",
     "embassy-time-timg0",
     "embassy-executor-thread",
+    "eh1",
 ] }
 esp-backtrace = { version = "0.11.0", features = [
     "esp32",
