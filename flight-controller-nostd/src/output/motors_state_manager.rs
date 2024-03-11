@@ -1,5 +1,5 @@
 use esp32_hal::{
-    gpio::{self, GpioPin},
+    gpio::{self, GpioPin, GpioProperties, Output, OutputPin, PushPull},
     ledc::{timer::Timer, HighSpeed, LEDC},
     peripheral::Peripheral,
     IO,
@@ -9,35 +9,73 @@ use crate::config::constants::{ESC_PWM_FREQUENCY_HZ, MAX_MOTOR_DUTY, MIN_MOTOR_D
 
 use super::motor_controller::MotorController;
 
-pub struct QuadcopterMotorsStateManager<'a> {
-    motor_1_controller: MotorController<'a, GpioPin<gpio::Output<gpio::PushPull>, 13>, 13>,
-    motor_2_controller: MotorController<'a, GpioPin<gpio::Output<gpio::PushPull>, 12>, 12>,
-    motor_3_controller: MotorController<'a, GpioPin<gpio::Output<gpio::PushPull>, 14>, 14>,
-    motor_4_controller: MotorController<'a, GpioPin<gpio::Output<gpio::PushPull>, 27>, 27>,
+pub struct QuadcopterMotorsStateManager<
+    'a,
+    O1,
+    O2,
+    O3,
+    O4,
+    const MOTOR_1_PIN: u8,
+    const MOTOR_2_PIN: u8,
+    const MOTOR_3_PIN: u8,
+    const MOTOR_4_PIN: u8,
+> where
+    O1: OutputPin,
+    O2: OutputPin,
+    O3: OutputPin,
+    O4: OutputPin,
+{
+    motor_1_controller: MotorController<'a, O1, MOTOR_1_PIN>,
+    motor_2_controller: MotorController<'a, O2, MOTOR_2_PIN>,
+    motor_3_controller: MotorController<'a, O3, MOTOR_3_PIN>,
+    motor_4_controller: MotorController<'a, O4, MOTOR_4_PIN>,
 }
 
-impl<'a> QuadcopterMotorsStateManager<'a> {
-    pub fn new(io: &mut IO, ledc_driver: &'a LEDC<'a>, timer: &'a Timer<'a, HighSpeed>) -> Self {
-        let motor_1_controller = MotorController::new(
-            ledc_driver,
-            timer,
-            unsafe { io.pins.gpio13.clone_unchecked() }.into_push_pull_output(),
-        );
-        let motor_2_controller = MotorController::new(
-            ledc_driver,
-            timer,
-            unsafe { io.pins.gpio12.clone_unchecked() }.into_push_pull_output(),
-        );
-        let motor_3_controller = MotorController::new(
-            ledc_driver,
-            timer,
-            unsafe { io.pins.gpio14.clone_unchecked() }.into_push_pull_output(),
-        );
-        let motor_4_controller = MotorController::new(
-            ledc_driver,
-            timer,
-            unsafe { io.pins.gpio27.clone_unchecked() }.into_push_pull_output(),
-        );
+impl<
+        'a,
+        O1,
+        O2,
+        O3,
+        O4,
+        const MOTOR_1_PIN: u8,
+        const MOTOR_2_PIN: u8,
+        const MOTOR_3_PIN: u8,
+        const MOTOR_4_PIN: u8,
+    >
+    QuadcopterMotorsStateManager<
+        'a,
+        O1,
+        O2,
+        O3,
+        O4,
+        MOTOR_1_PIN,
+        MOTOR_2_PIN,
+        MOTOR_3_PIN,
+        MOTOR_4_PIN,
+    >
+where
+    O1: OutputPin,
+    O2: OutputPin,
+    O3: OutputPin,
+    O4: OutputPin,
+    GpioPin<Output<PushPull>, MOTOR_1_PIN>: GpioProperties + OutputPin + Peripheral<P = O1>,
+    GpioPin<Output<PushPull>, MOTOR_2_PIN>: GpioProperties + OutputPin + Peripheral<P = O2>,
+    GpioPin<Output<PushPull>, MOTOR_3_PIN>: GpioProperties + OutputPin + Peripheral<P = O3>,
+    GpioPin<Output<PushPull>, MOTOR_4_PIN>: GpioProperties + OutputPin + Peripheral<P = O4>,
+{
+    pub fn new_with_pins(
+        ledc_driver: &'a LEDC<'a>,
+        timer: &'a Timer<'a, HighSpeed>,
+        motor_1_pin: GpioPin<Output<PushPull>, MOTOR_1_PIN>,
+        motor_2_pin: GpioPin<Output<PushPull>, MOTOR_2_PIN>,
+        motor_3_pin: GpioPin<Output<PushPull>, MOTOR_3_PIN>,
+        motor_4_pin: GpioPin<Output<PushPull>, MOTOR_4_PIN>,
+    ) -> Self {
+        let motor_1_controller = MotorController::new(ledc_driver, timer, motor_1_pin);
+        let motor_2_controller = MotorController::new(ledc_driver, timer, motor_2_pin);
+        let motor_3_controller = MotorController::new(ledc_driver, timer, motor_3_pin);
+        let motor_4_controller = MotorController::new(ledc_driver, timer, motor_4_pin);
+
         QuadcopterMotorsStateManager {
             motor_1_controller,
             motor_2_controller,

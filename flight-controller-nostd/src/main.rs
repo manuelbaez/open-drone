@@ -40,14 +40,13 @@ async fn main(spawner: Spawner) {
     // This line is for Wokwi only so that the console output is formatted correctly
     // print!("\x1b[20h");
 
-    let mut io = IO::new(peripherals.GPIO, peripherals.IO_MUX);
+    let io = IO::new(peripherals.GPIO, peripherals.IO_MUX);
 
     let ledc_peripheral = unsafe { peripherals.LEDC.clone_unchecked() };
     let mut ledc_driver = LEDC::new(ledc_peripheral, &clocks);
     ledc_driver.set_global_slow_clock(LSGlobalClkSource::APBClk);
 
     let mut timer = ledc_driver.get_timer::<ledc::HighSpeed>(timer::Number::Timer0);
-
     timer
         .configure(timer::config::Config {
             duty: timer::config::Duty::Duty14Bit,
@@ -56,11 +55,18 @@ async fn main(spawner: Spawner) {
         })
         .unwrap();
 
-    let mut motors_manager = QuadcopterMotorsStateManager::new(&mut io, &ledc_driver, &timer);
+    let mut motors_manager = QuadcopterMotorsStateManager::new_with_pins(
+        &ledc_driver,
+        &timer,
+        io.pins.gpio13.into_push_pull_output(),
+        io.pins.gpio12.into_push_pull_output(),
+        io.pins.gpio14.into_push_pull_output(),
+        io.pins.gpio27.into_push_pull_output(),
+    );
 
     //uart sample code
     let uart_config = uart::config::Config::default();
-    let uart_pins = uart::TxRxPins::new_tx_rx(io.pins.gpio11, io.pins.gpio19);
+    let uart_pins = uart::TxRxPins::new_tx_rx(io.pins.gpio11, io.pins.gpio1);
     let mut uart = Uart::new_with_config(peripherals.UART2, uart_config, Some(uart_pins), &clocks);
     let byte = uart.read().unwrap();
 
