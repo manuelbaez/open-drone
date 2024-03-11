@@ -1,9 +1,15 @@
-use esp32_hal::peripherals::Peripherals;
+use esp32_hal::clock::Clocks;
+use esp32_hal::peripheral::Peripheral;
+use esp32_hal::{
+    gpio::{InputPin, OutputPin},
+    prelude::*,
+};
+use esp32_hal::{uart, Uart};
 
 use super::protocol::{
-    IBusMessageParser, IbusCommands, IbusTelemetrySensorsIds, PROTOCOL_OVERHEAD, PROTOCOL_SIZE,
+    IBusMessageParser, IbusCommands, IbusTelemetrySensorsIds, IbusUartMonitor, PROTOCOL_OVERHEAD,
+    PROTOCOL_SIZE,
 };
-use crate::communication_interfaces::controller::RemoteTelemetry;
 use crate::shared_core_values::AtomicTelemetry;
 use core::sync::atomic::Ordering;
 struct IbusSensor {
@@ -45,31 +51,33 @@ impl TryFrom<u8> for ChannelMappings {
     }
 }
 
-pub struct IBusTelemetry<'a> {
-    uart_driver: UartDriver<'a>,
+pub struct IBusTelemetry<'a, T> {
+    uart_driver: Uart<'a, T>,
+    shared_telemetry: &'a AtomicTelemetry,
 }
 
-impl<'a> IBusTelemetry<'a> {
-    pub fn new(peripherals: &mut Peripherals) -> Self {
-        let tx = unsafe { peripherals.pins.gpio18.clone_unchecked() };
-        let rx = unsafe { peripherals.pins.gpio5.clone_unchecked() };
-
-        let uart2 = unsafe { peripherals.uart1.clone_unchecked() };
-        let config = config::Config::new().baudrate(115_200.Hz());
-        let uart_driver = UartDriver::new(
-            uart2,
-            tx,
-            rx,
-            Option::<gpio::AnyIOPin>::None,
-            Option::<gpio::AnyIOPin>::None,
-            &config,
-        )
-        .unwrap();
-        Self { uart_driver }
+impl<'a, T> IBusTelemetry<'a, T>
+where
+    T: uart::Instance,
+{
+    pub fn new<TX: OutputPin, RX: InputPin>(
+        tx: impl Peripheral<P = TX> + 'a,
+        rx: impl Peripheral<P = RX> + 'a,
+        uart: impl Peripheral<P = T> + 'a,
+        shared_telemetry: &'a AtomicTelemetry,
+        clocks: &Clocks,
+    ) -> Self {
+        let uart_config = uart::config::Config::default();
+        let uart_pins = uart::TxRxPins::new_tx_rx(tx, rx);
+        let uart_driver = Uart::new_with_config(uart, uart_config, Some(uart_pins), clocks);
+        Self {
+            uart_driver,
+            shared_telemetry,
+        }
     }
 
     fn send_sensor_value(
-        &self,
+        &mut self,
         sensor_addr: u8,
         sensor_type: u8,
         shared_telemetry: &AtomicTelemetry,
@@ -84,25 +92,37 @@ impl<'a> IBusTelemetry<'a> {
                     ((battery_voltage >> 8) & 0x00ff) as u8, /*Sensor Value higher byte */
                 ];
                 let tx_buffer: [u8; 6] = IBusMessageParser::format_ibus_message(message);
-                self.uart_driver.write(&tx_buffer).unwrap();
+                self.uart_driver.write_bytes(&tx_buffer).unwrap();
             }
             _ => (),
         }
     }
+}
+
+impl<'a, T> IbusUartMonitor<T> for IBusTelemetry<'a, T>
+where
+    T: uart::Instance,
+{
+    fn read_uart_byte(&mut self) -> Result<u8, ()> {
+        let result = self.uart_driver.read();
+        if result.is_err() {
+            Ok(result.unwrap())
+        } else {
+            Err(())
+        }
+    }
 
     fn process_ibus_buffer(
-        &self,
+        &mut self,
         message_buffer: [u8; PROTOCOL_SIZE - PROTOCOL_OVERHEAD],
-        message_length: usize,
-        shared_telemetry: &AtomicTelemetry,
+        message_size: usize,
     ) {
         let message_command = message_buffer[0];
         match message_command {
             IbusCommands::CHANNELS_DATA => (),
             _ => {
                 let sensor_addr: u8 = message_buffer[0] & 0x0f; //4 LS Bits of the read byte
-                if sensor_addr <= IBUS_SENSORS.len() as u8 && sensor_addr > 0 && message_length == 1
-                {
+                if sensor_addr <= IBUS_SENSORS.len() as u8 && sensor_addr > 0 && message_size == 1 {
                     let mapped_command = message_buffer[0] & 0xf0; //4 MS Bits of the read byte
                     let sensor = &IBUS_SENSORS[sensor_addr as usize - 1];
                     match mapped_command {
@@ -110,7 +130,7 @@ impl<'a> IBusTelemetry<'a> {
                             let message = [IbusCommands::SENSORS_DISCOVER + sensor_addr];
                             let tx_buffer: [u8; 4] =
                                 IBusMessageParser::format_ibus_message(message);
-                            self.uart_driver.write(&tx_buffer).unwrap();
+                            self.uart_driver.write_bytes(&tx_buffer).unwrap();
                         }
                         IbusCommands::POLL_SENSOR_TYPE => {
                             let message = [
@@ -120,12 +140,12 @@ impl<'a> IBusTelemetry<'a> {
                             ];
                             let tx_buffer: [u8; 6] =
                                 IBusMessageParser::format_ibus_message(message);
-                            self.uart_driver.write(&tx_buffer).unwrap();
+                            self.uart_driver.write_bytes(&tx_buffer).unwrap();
                         }
                         IbusCommands::MEASUREMENT => self.send_sensor_value(
                             sensor_addr,
                             sensor.sensor_type,
-                            shared_telemetry,
+                            self.shared_telemetry,
                         ),
                         _ => (),
                     }
@@ -133,12 +153,16 @@ impl<'a> IBusTelemetry<'a> {
             }
         }
     }
-}
 
-impl<'a> RemoteTelemetry for IBusTelemetry<'a> {
-    fn start_telemetry_tx_loop(&self, shared_telemetry: &AtomicTelemetry) {
-        IBusMessageParser::start_monitor_on_uart(&self.uart_driver, |buffer, message_length| {
-            self.process_ibus_buffer(buffer, message_length, shared_telemetry);
-        });
+    fn get_read_buffer_count(&self) -> u16 {
+        T::get_rx_fifo_count()
     }
 }
+// impl<'a, T> RemoteTelemetry for IBusTelemetry<'a, T>
+// where
+//     T: uart::Instance,
+// {
+//     fn start_telemetry_tx_loop(&mut self, shared_telemetry: &AtomicTelemetry) {
+//         self.start_monitor_on_uart();
+//     }
+// }

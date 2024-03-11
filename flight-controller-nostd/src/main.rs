@@ -9,7 +9,6 @@ use embassy_time::{Duration, Timer};
 use esp32_hal::{
     clock::ClockControl,
     embassy,
-    gpio::Pins,
     ledc::{self, timer, LSGlobalClkSource, LEDC},
     peripheral::Peripheral,
     peripherals::Peripherals,
@@ -19,7 +18,7 @@ use esp32_hal::{
 use esp_backtrace as _;
 use output::motors_state_manager::QuadcopterMotorsStateManager;
 
-// mod communication_interfaces;
+mod communication_interfaces;
 mod config;
 mod drivers;
 mod output;
@@ -65,10 +64,6 @@ async fn main(spawner: Spawner) {
     );
 
     //uart sample code
-    let uart_config = uart::config::Config::default();
-    let uart_pins = uart::TxRxPins::new_tx_rx(io.pins.gpio11, io.pins.gpio1);
-    let mut uart = Uart::new_with_config(peripherals.UART2, uart_config, Some(uart_pins), &clocks);
-    let byte = uart.read().unwrap();
 
     let mut count = 0;
     loop {

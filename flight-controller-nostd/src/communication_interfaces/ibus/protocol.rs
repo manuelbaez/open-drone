@@ -1,8 +1,7 @@
-use esp_idf_svc::hal::{delay::BLOCK, uart::UartDriver};
+use embassy_time::{Duration, Instant, Timer};
+use esp32_hal::{prelude::*, uart};
 
-use crate::util::time::get_current_system_time;
-
-pub const PROTOCOL_MESSAGE_TIMEGAP_US: i64 = 3500;
+pub const PROTOCOL_MESSAGE_TIMEGAP_US: u64 = 3500_u64;
 pub const PROTOCOL_SIZE: usize = 0x20; // The max message length is 32 bytes
 pub const PROTOCOL_OVERHEAD: usize = 3; // <len><cmd><data....><chkl><chkh> this one accounts for len, and two checksum bytes
 pub const PROTOCOL_CHANNELS: usize = 10;
@@ -83,16 +82,19 @@ impl IBusMessageParser {
 
         tx_buffer
     }
-    pub fn start_monitor_on_uart(
-        uart_driver: &UartDriver<'_>,
+    pub async fn start_monitor_on_uart<'a, T: uart::Instance>(
+        uart_driver: &mut uart::Uart<'a, T>,
         mut message_callback: impl FnMut([u8; PROTOCOL_SIZE - PROTOCOL_OVERHEAD], usize) -> (),
-    ) {
-        let mut previous_time = get_current_system_time();
+    ) -> ! {
+        let mut previous_time = Instant::now().as_micros();
         loop {
-            let mut read_buffer = [0_u8];
-            uart_driver.read(&mut read_buffer, BLOCK).unwrap();
+            if T::get_rx_fifo_count() == 0 {
+                Timer::after(Duration::from_micros(250)).await;
+                continue;
+            };
+            let mut read_byte = uart_driver.read().unwrap();
 
-            let current_time = get_current_system_time();
+            let current_time = Instant::now().as_micros();
             let elapsed_time = current_time - previous_time;
             previous_time = current_time;
 
@@ -102,12 +104,13 @@ impl IBusMessageParser {
             }
 
             let mut raw_message_buffer = [0_u8; PROTOCOL_SIZE];
-            let current_message_size: usize = read_buffer[0] as usize;
+            let current_message_size: usize = read_byte as usize;
             let mut current_index: usize = 0;
             let mut buffer_processed = false;
-            loop {
+
+            while T::get_rx_fifo_count() > 0 {
                 if current_index < PROTOCOL_SIZE {
-                    raw_message_buffer[current_index] = read_buffer[0];
+                    raw_message_buffer[current_index] = read_byte;
                 }
                 //Message read completed process the message buffer
                 if !buffer_processed
@@ -124,10 +127,69 @@ impl IBusMessageParser {
                 }
                 // Read until there is nothing to read then break the loop
                 // and return back to validate for the protocol time gap
-                let read_length = uart_driver.read(&mut read_buffer, 0).unwrap();
-                if read_length <= 0 {
-                    break;
+
+                read_byte = uart_driver.read().unwrap();
+                current_index += 1;
+            }
+        }
+    }
+}
+
+pub trait IbusUartMonitor<T>
+where
+    T: uart::Instance,
+{
+    fn read_uart_byte(&mut self) -> Result<u8, ()>;
+    fn get_read_buffer_count(&self) -> u16;
+    fn process_ibus_buffer(
+        &mut self,
+        message_buffer: [u8; PROTOCOL_SIZE - PROTOCOL_OVERHEAD],
+        message_size: usize,
+    );
+    async fn start_monitor_on_uart<'a>(&mut self) -> ! {
+        let mut previous_time = Instant::now().as_micros();
+        loop {
+            if self.get_read_buffer_count() == 0 {
+                Timer::after(Duration::from_micros(250)).await;
+                continue;
+            };
+            let mut read_byte = self.read_uart_byte().unwrap();
+
+            let current_time = Instant::now().as_micros();
+            let elapsed_time = current_time - previous_time;
+            previous_time = current_time;
+
+            //Ignore any uart bytes that come befor the next message timeframe
+            if elapsed_time < PROTOCOL_MESSAGE_TIMEGAP_US {
+                continue;
+            }
+
+            let mut raw_message_buffer = [0_u8; PROTOCOL_SIZE];
+            let current_message_size: usize = read_byte as usize;
+            let mut current_index: usize = 0;
+            let mut buffer_processed = false;
+
+            while self.get_read_buffer_count() > 0 {
+                if current_index < PROTOCOL_SIZE {
+                    raw_message_buffer[current_index] = read_byte;
                 }
+                //Message read completed process the message buffer
+                if !buffer_processed
+                    && (current_index >= (PROTOCOL_SIZE - 1)
+                        || current_index >= (current_message_size - 1))
+                {
+                    buffer_processed = true;
+                    let parsing_result =
+                        IBusMessageParser::extract_and_validate_message_content(raw_message_buffer);
+                    if !parsing_result.is_err() {
+                        let (buffer, size) = parsing_result.unwrap();
+                        self.process_ibus_buffer(buffer, size);
+                    }
+                }
+                // Read until there is nothing to read then break the loop
+                // and return back to validate for the protocol time gap
+
+                read_byte = self.read_uart_byte().unwrap();
                 current_index += 1;
             }
         }

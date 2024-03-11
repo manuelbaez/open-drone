@@ -1,13 +1,18 @@
 use super::protocol::{
-    IBusMessageParser, IbusCommands, CHANNEL_CENTER_POINT, CHANNEL_MAX_POINT, CHANNEL_MIN_POINT,
+    IbusCommands, IbusUartMonitor, CHANNEL_CENTER_POINT, CHANNEL_MAX_POINT, CHANNEL_MIN_POINT,
     PROTOCOL_CHANNELS, PROTOCOL_OVERHEAD, PROTOCOL_SIZE,
 };
-use crate::communication_interfaces::controller::RemoteControl;
 use crate::shared_core_values::AtomicControllerInput;
 
-
-use shared_definitions::controller::ControllerInput;
 use core::sync::atomic::Ordering;
+use esp32_hal::{
+    clock::Clocks,
+    gpio::{InputPin, OutputPin},
+    peripheral::Peripheral,
+    prelude::*,
+    uart, Uart,
+};
+use shared_definitions::controller::ControllerInput;
 
 #[repr(u8)]
 enum ChannelMappings {
@@ -38,27 +43,29 @@ impl TryFrom<u8> for ChannelMappings {
     }
 }
 
-pub struct IBusController<'a> {
-    uart_driver: UartDriver<'a>,
+pub struct IBusController<'a, T> {
+    uart_driver: Uart<'a, T>,
+    shared_controller_input: &'a AtomicControllerInput,
 }
 
-impl<'a> IBusController<'a> {
-    pub fn new(peripherals: &mut Peripherals) -> Self {
-        let tx = unsafe { peripherals.pins.gpio17.clone_unchecked() };
-        let rx = unsafe { peripherals.pins.gpio16.clone_unchecked() };
-
-        let uart2 = unsafe { peripherals.uart2.clone_unchecked() };
-        let config = config::Config::new().baudrate(115_200.Hz());
-        let uart_driver = UartDriver::new(
-            uart2,
-            tx,
-            rx,
-            Option::<gpio::AnyIOPin>::None,
-            Option::<gpio::AnyIOPin>::None,
-            &config,
-        )
-        .unwrap();
-        Self { uart_driver }
+impl<'a, T> IBusController<'a, T>
+where
+    T: uart::Instance + 'a,
+{
+    pub fn new<TX: OutputPin, RX: InputPin>(
+        tx: impl Peripheral<P = TX> + 'a,
+        rx: impl Peripheral<P = RX> + 'a,
+        uart: impl Peripheral<P = T> + 'a,
+        shared_controller_input: &'a AtomicControllerInput,
+        clocks: &Clocks,
+    ) -> Self {
+        let uart_config = uart::config::Config::default();
+        let uart_pins = uart::TxRxPins::new_tx_rx(tx, rx);
+        let uart_driver = Uart::new_with_config(uart, uart_config, Some(uart_pins), clocks);
+        Self {
+            uart_driver,
+            shared_controller_input,
+        }
     }
 
     fn map_data_to_channels(
@@ -84,10 +91,7 @@ impl<'a> IBusController<'a> {
         channel_value != CHANNEL_MIN_POINT
     }
 
-    fn process_ibus_channels_message(
-        data: [u8; PROTOCOL_SIZE - PROTOCOL_OVERHEAD],
-        shared_controller_input: &AtomicControllerInput,
-    ) {
+    fn process_ibus_channels_message(&self, data: [u8; PROTOCOL_SIZE - PROTOCOL_OVERHEAD]) {
         let channels = Self::map_data_to_channels(data);
         let mut input_values = ControllerInput::default();
         for (index, data) in channels.into_iter().enumerate() {
@@ -112,51 +116,70 @@ impl<'a> IBusController<'a> {
             }
         }
 
-        shared_controller_input
+        self.shared_controller_input
             .roll
             .store(input_values.roll, Ordering::Relaxed);
-        shared_controller_input
+        self.shared_controller_input
             .pitch
             .store(input_values.pitch, Ordering::Relaxed);
-        shared_controller_input
+        self.shared_controller_input
             .yaw
             .store(input_values.yaw, Ordering::Relaxed);
-        shared_controller_input
+        self.shared_controller_input
             .throttle
             .store(input_values.throttle, Ordering::Relaxed);
-        shared_controller_input
+        self.shared_controller_input
             .kill_motors
             .store(input_values.kill_motors, Ordering::Relaxed);
-        shared_controller_input
+        self.shared_controller_input
             .start
             .store(input_values.start, Ordering::Relaxed);
-        shared_controller_input
+        self.shared_controller_input
             .calibrate_esc
             .store(input_values.calibrate_esc, Ordering::Relaxed);
-        shared_controller_input
+        self.shared_controller_input
             .calibrate_sensors
             .store(input_values.calibrate_sensors, Ordering::Relaxed);
     }
+}
+
+impl<'a, T> IbusUartMonitor<T> for IBusController<'a, T>
+where
+    T: uart::Instance,
+{
+    fn read_uart_byte(&mut self) -> Result<u8, ()> {
+        let result = self.uart_driver.read();
+        if result.is_err() {
+            Ok(result.unwrap())
+        } else {
+            Err(())
+        }
+    }
 
     fn process_ibus_buffer(
-        &self,
+        &mut self,
         message_buffer: [u8; PROTOCOL_SIZE - PROTOCOL_OVERHEAD],
-        shared_controller_input: &AtomicControllerInput,
+        _message_size: usize,
     ) {
         let message_command = message_buffer[0];
         match message_command {
             IbusCommands::CHANNELS_DATA => {
-                Self::process_ibus_channels_message(message_buffer, shared_controller_input);
+                self.process_ibus_channels_message(message_buffer);
             }
             _ => (),
         }
     }
-}
 
-impl<'a> RemoteControl for IBusController<'a> {
-    fn start_input_changes_monitor(&self, shared_controller_input: &AtomicControllerInput) {
-        IBusMessageParser::start_monitor_on_uart(&self.uart_driver, |buffer, _| {
-            self.process_ibus_buffer(buffer, shared_controller_input);
-        });
+    fn get_read_buffer_count(&self) -> u16 {
+        T::get_rx_fifo_count()
     }
 }
+
+// impl<'a, T> RemoteControl for IBusController<'a, T>
+// where
+//     T: uart::Instance,
+// {
+//     fn start_input_changes_monitor(&mut self) {
+//         self.start_monitor_on_uart();
+//     }
+// }

@@ -3,8 +3,10 @@ use crate::{
     util::math::vectors::{AccelerationVector3D, RotationVector3D},
 };
 use embassy_time::{Duration, Timer};
-use embedded_hal::i2c::I2c;
-use esp32_hal::i2c::{self, I2C};
+use esp32_hal::{
+    i2c::{self, I2C},
+    prelude::*,
+};
 
 use super::registers::{
     AccelGyroConfigRegister, LowPassFrequencyValues, MPURegisters, Mpu6050AccelRegOut,
