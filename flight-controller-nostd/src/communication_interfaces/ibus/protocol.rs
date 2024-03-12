@@ -1,4 +1,4 @@
-use embassy_time::{Duration, Instant, Timer};
+use embassy_time::{Duration, Timer};
 use esp32_hal::{prelude::*, uart};
 
 use crate::util::time::get_current_system_time_us;
@@ -84,57 +84,7 @@ impl IBusMessageParser {
 
         tx_buffer
     }
-    pub async fn start_monitor_on_uart<'a, T: uart::Instance>(
-        uart_driver: &mut uart::Uart<'a, T>,
-        mut message_callback: impl FnMut([u8; PROTOCOL_SIZE - PROTOCOL_OVERHEAD], usize) -> (),
-    ) -> ! {
-        let mut previous_time = get_current_system_time_us();
-        loop {
-            if T::get_rx_fifo_count() == 0 {
-                Timer::after(Duration::from_micros(250)).await;
-                continue;
-            };
-            let mut read_byte = uart_driver.read().unwrap();
-
-            let current_time = get_current_system_time_us();
-            let elapsed_time = current_time - previous_time;
-            previous_time = current_time;
-
-            //Ignore any uart bytes that come befor the next message timeframe
-            if elapsed_time < PROTOCOL_MESSAGE_TIMEGAP_US {
-                continue;
-            }
-
-            let mut raw_message_buffer = [0_u8; PROTOCOL_SIZE];
-            let current_message_size: usize = read_byte as usize;
-            let mut current_index: usize = 0;
-            let mut buffer_processed = false;
-
-            while T::get_rx_fifo_count() > 0 {
-                if current_index < PROTOCOL_SIZE {
-                    raw_message_buffer[current_index] = read_byte;
-                }
-                //Message read completed process the message buffer
-                if !buffer_processed
-                    && (current_index >= (PROTOCOL_SIZE - 1)
-                        || current_index >= (current_message_size - 1))
-                {
-                    buffer_processed = true;
-                    let parsing_result =
-                        IBusMessageParser::extract_and_validate_message_content(raw_message_buffer);
-                    if !parsing_result.is_err() {
-                        let (buffer, size) = parsing_result.unwrap();
-                        message_callback(buffer, size);
-                    }
-                }
-                // Read until there is nothing to read then break the loop
-                // and return back to validate for the protocol time gap
-
-                read_byte = uart_driver.read().unwrap();
-                current_index += 1;
-            }
-        }
-    }
+    
 }
 
 pub trait IbusUartMonitor<T>

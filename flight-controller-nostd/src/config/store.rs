@@ -10,8 +10,9 @@ const FLASH_ADDR: u32 = 0x9000;
 
 // pub static APP_CONFIG_STORE: Lazy<Mutex<ConfigStorage>> = Lazy::new(|| Mutex::new(ConfigStorage::new()));
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct AppStoredConfig {
+    pub initialized: bool,
     pub gyro_calibration: RotationVector3D,
     pub accelerometer_calibration: AccelerationVector3D,
 }
@@ -63,8 +64,10 @@ impl ConfigStorage {
                 message: &"Failed to store the config",
                 error: result.err(),
             })
-        } else {
+        } else if config.initialized {
             Ok(config)
+        } else {
+            Ok(AppStoredConfig::default())
         }
     }
 }

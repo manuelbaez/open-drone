@@ -1,11 +1,8 @@
 use esp32_hal::{
-    gpio::{self, GpioPin, GpioProperties, Output, OutputPin, PushPull},
+    gpio::{GpioPin, GpioProperties, Output, OutputPin, PushPull},
     ledc::{timer::Timer, HighSpeed, LEDC},
     peripheral::Peripheral,
-    IO,
 };
-
-use crate::config::constants::{ESC_PWM_FREQUENCY_HZ, MAX_MOTOR_DUTY, MIN_MOTOR_DUTY};
 
 use super::motor_controller::MotorController;
 

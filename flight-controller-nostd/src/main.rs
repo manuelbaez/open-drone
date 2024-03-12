@@ -3,77 +3,76 @@
 #![feature(const_float_bits_conv)]
 #![feature(generic_const_exprs)]
 
-use config::constants::ESC_PWM_FREQUENCY_HZ;
+use communication_interfaces::ibus::{controller::IBusController, protocol::IbusUartMonitor};
 use embassy_executor::Spawner;
-use embassy_time::{Duration, Timer};
+use embassy_time::Timer;
 use esp32_hal::{
-    clock::ClockControl,
+    clock::{ClockControl, Clocks},
     embassy,
-    ledc::{self, timer, LSGlobalClkSource, LEDC},
-    peripheral::Peripheral,
     peripherals::Peripherals,
     prelude::*,
-    uart, Uart, IO,
+    IO,
 };
 use esp_backtrace as _;
-use output::motors_state_manager::QuadcopterMotorsStateManager;
+use shared_core_values::SHARED_CONTROLLER_INPUT;
+use static_cell::StaticCell;
+use threads::{flight_thread, telemetry_thread};
 
 mod communication_interfaces;
 mod config;
+mod control;
 mod drivers;
 mod output;
 mod shared_core_values;
+mod threads;
 mod util;
-mod control;
+
+static CLOCKS: StaticCell<Clocks> = StaticCell::new();
 
 #[main]
-async fn main(spawner: Spawner) {
-    let mut peripherals = Peripherals::take();
+async fn main(spawner: Spawner) -> ! {
+    let peripherals = Peripherals::take();
     let system = peripherals.SYSTEM.split();
     let clocks = ClockControl::max(system.clock_control).freeze();
+    let clocks = CLOCKS.init(clocks);
 
-    let timer = esp32_hal::timer::TimerGroup::new(peripherals.TIMG0, &clocks);
-    embassy::init(&clocks, timer);
-
-    // spawner.spawn(one_second_task()).unwrap();
+    let timer = esp32_hal::timer::TimerGroup::new(peripherals.TIMG0, clocks);
+    embassy::init(clocks, timer);
 
     // This line is for Wokwi only so that the console output is formatted correctly
     // print!("\x1b[20h");
 
     let io = IO::new(peripherals.GPIO, peripherals.IO_MUX);
 
-    let ledc_peripheral = unsafe { peripherals.LEDC.clone_unchecked() };
-    let mut ledc_driver = LEDC::new(ledc_peripheral, &clocks);
-    ledc_driver.set_global_slow_clock(LSGlobalClkSource::APBClk);
-
-    let mut timer = ledc_driver.get_timer::<ledc::HighSpeed>(timer::Number::Timer0);
-    timer
-        .configure(timer::config::Config {
-            duty: timer::config::Duty::Duty14Bit,
-            clock_source: timer::HSClockSource::APBClk,
-            frequency: ESC_PWM_FREQUENCY_HZ.Hz(),
-        })
+    spawner
+        .spawn(flight_thread(
+            peripherals.I2C0,
+            io.pins.gpio21,
+            io.pins.gpio22,
+            peripherals.LEDC,
+            io.pins.gpio13.into_push_pull_output(),
+            io.pins.gpio12.into_push_pull_output(),
+            io.pins.gpio14.into_push_pull_output(),
+            io.pins.gpio27.into_push_pull_output(),
+            clocks,
+        ))
         .unwrap();
 
-    let mut motors_manager = QuadcopterMotorsStateManager::new_with_pins(
-        &ledc_driver,
-        &timer,
-        io.pins.gpio13.into_push_pull_output(),
-        io.pins.gpio12.into_push_pull_output(),
-        io.pins.gpio14.into_push_pull_output(),
-        io.pins.gpio27.into_push_pull_output(),
+    spawner.spawn(telemetry_thread()).unwrap();
+
+    let mut ibus_controller = IBusController::new(
+        io.pins.gpio17,
+        io.pins.gpio16,
+        peripherals.UART2,
+        &SHARED_CONTROLLER_INPUT,
+        clocks,
     );
-
-    //uart sample code
-
+    ibus_controller.start_monitor_on_uart().await;
     let mut count = 0;
     loop {
-        esp_println::println!("Main Task Count: {}", count);
+        esp_println::println!("Main Task Count: {} ", count);
         count += 1;
-        Timer::after(Duration::from_millis(500)).await;
-        motors_manager.set_motor_power([0.0_f32; 4]);
-        Timer::after(Duration::from_millis(500)).await;
-        motors_manager.set_motor_power([100.0_f32; 4]);
+        Timer::after_millis(1000).await;
     }
 }
 

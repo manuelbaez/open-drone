@@ -149,9 +149,10 @@ where
 {
     fn read_uart_byte(&mut self) -> Result<u8, ()> {
         let result = self.uart_driver.read();
-        if result.is_err() {
+        if !result.is_err() {
             Ok(result.unwrap())
         } else {
+            esp_println::println!("Error: {:?}", result.err());
             Err(())
         }
     }
