@@ -47,14 +47,15 @@ pub async fn start_flight_controllers<'a, I: i2c::Instance>(
     mut controllers_out_callback: impl FnMut(MainControlLoopOutCommands) -> (),
 ) -> ! {
     let mut previous_time_us = 0_u64;
-
+    
     let mut rotation_mode_flight_controller = RotationRateFlightController::new();
     let mut angle_flight_controller =
-        AngleModeFlightController::new(MAX_ROTATION_RATE, GYRO_DRIFT_DEG, ACCEL_UNCERTAINTY_DEG);
-
+    AngleModeFlightController::new(MAX_ROTATION_RATE, GYRO_DRIFT_DEG, ACCEL_UNCERTAINTY_DEG);
+    
     let mut drone_on = false;
-
+    
     loop {
+        // let time_a = get_current_system_time_us();
         //Read remote control input values
         let input_values = ControllerInput {
             roll: controller_input.roll.load(Ordering::Relaxed),
@@ -123,6 +124,7 @@ pub async fn start_flight_controllers<'a, I: i2c::Instance>(
         let time_since_last_reading_seconds =
             (current_time_us - previous_time_us) as f32 / US_IN_SECOND;
 
+        // esp_println::println!("From Control Loop {}", current_time_us - previous_time_us);
         let throttle: f32 = (input_values.throttle as f32 / u8::max_value() as f32)
             * (MAX_THROTTLE - MIN_POWER)
             + MIN_POWER;
@@ -156,6 +158,8 @@ pub async fn start_flight_controllers<'a, I: i2c::Instance>(
 
         let controller_output =
             rotation_mode_flight_controller.get_next_output(rotation_flight_controller_input);
+
+        // let time_b = get_current_system_time_us();
 
         //Store telemetry data
         telemetry_data.loop_exec_time_us.store(

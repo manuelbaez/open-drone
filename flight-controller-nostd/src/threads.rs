@@ -3,14 +3,16 @@ use core::sync::atomic::Ordering;
 use embassy_time::Timer;
 use esp32_hal::{
     clock::Clocks,
-    gpio::{self, Gpio12, Gpio13, Gpio14, Gpio21, Gpio22, Gpio27, Unknown},
+    gpio::{self, Gpio12, Gpio13, Gpio14, Gpio16, Gpio17, Gpio21, Gpio22, Gpio27, Unknown},
     i2c::I2C,
     ledc::{self, timer, LSGlobalClkSource, LEDC},
-    peripherals::{self, I2C0},
+    peripherals::{self, I2C0, UART2},
     prelude::*,
+    uart,
 };
 
 use crate::{
+    communication_interfaces::ibus::{controller::IBusController, protocol::IbusUartMonitor},
     config::{
         constants::{ESC_PWM_FREQUENCY_HZ, MAX_MOTOR_POWER, MIN_POWER, VEHICLE_TYPE},
         store::{AppStoredConfig, ConfigStorage},
@@ -71,7 +73,7 @@ pub async fn flight_thread(
     let accelerometer_calibration = app_config.accelerometer_calibration.clone();
     let gyro_calibration = app_config.gyro_calibration.clone();
 
-    let mut i2c_driver = I2C::new(i2c_dev, sda, scl, 400_u32.kHz(), &clocks);
+    let mut i2c_driver = I2C::new(i2c_dev, sda, scl, 400_u32.kHz(), clocks);
     let mut imu = MPU6050Sensor::new(&mut i2c_driver, gyro_calibration, accelerometer_calibration);
     imu.enable_low_pass_filter(LowPassFrequencyValues::Freq10Hz);
     imu.init().await;
@@ -169,6 +171,17 @@ pub async fn telemetry_thread() -> ! {
         );
         Timer::after_millis(250).await;
     }
+}
+
+#[embassy_executor::task]
+pub async fn input_thread(
+    tx: Gpio17<Unknown>,
+    rx: Gpio16<Unknown>,
+    uart: UART2,
+    clocks: &'static Clocks<'static>,
+) -> ! {
+    let mut ibus_controller = IBusController::new(tx, rx, uart, &SHARED_CONTROLLER_INPUT, clocks);
+    ibus_controller.start_monitor_on_uart().await
 }
 
 // pub fn measurements_thread() {
