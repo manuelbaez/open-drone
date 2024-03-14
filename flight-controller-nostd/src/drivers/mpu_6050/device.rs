@@ -1,17 +1,16 @@
+use super::registers::{
+    AccelGyroConfigRegister, LowPassFrequencyValues, MPURegisters, Mpu6050AccelRegOut,
+    Mpu6050GyroRegOut, MpuAccelSensitivityRanges, MpuGyroSensitivityRanges,
+    MpuPowerManagementRegister, DEFAULT_SLAVE_ADDR,
+};
 use crate::{
     drivers::imu_sensors::{Accelerometer, CombinedGyroscopeAccelerometer, Gyroscope},
     util::math::vectors::{AccelerationVector3D, RotationVector3D},
 };
 use embassy_time::{Duration, Timer};
-use esp32_hal::{
+use esp_hal::{
     i2c::{self, I2C},
     prelude::*,
-};
-
-use super::registers::{
-    AccelGyroConfigRegister, LowPassFrequencyValues, MPURegisters, Mpu6050AccelRegOut,
-    Mpu6050GyroRegOut, MpuAccelSensitivityRanges, MpuGyroSensitivityRanges,
-    MpuPowerManagementRegister, DEFAULT_SLAVE_ADDR,
 };
 
 #[derive(Default)]
@@ -56,15 +55,17 @@ where
     }
 
     pub async fn init(&mut self) {
-        Timer::after(Duration::from_millis(50)).await;
+        Timer::after_millis(100).await;
+        self.reset_device();
+        Timer::after_millis(100).await;
         self.update_gyro_config_register();
-        Timer::after(Duration::from_millis(50)).await;
+        Timer::after_millis(100).await;
         self.update_accel_config_register();
-        Timer::after(Duration::from_millis(50)).await;
+        Timer::after_millis(100).await;
         self.set_power_management_register_default();
-        Timer::after(Duration::from_millis(500)).await;
+        Timer::after_millis(500).await;
         self.update_dlpf_filter_register();
-        Timer::after(Duration::from_millis(50)).await;
+        Timer::after_millis(100).await;
     }
 
     pub fn enable_low_pass_filter(&mut self, low_pass_freq: LowPassFrequencyValues) {
@@ -85,6 +86,16 @@ where
     pub fn set_accel_sensitivity(&mut self, sensitivity: MpuGyroSensitivityRanges) {
         self.gyro_sensitivity = sensitivity;
         self.update_accel_config_register();
+    }
+
+    fn reset_device(&mut self) {
+        let register_value = MpuPowerManagementRegister::new()
+            .with_device_reset(true)
+            .with_sleep(true)
+            .into_bits();
+        self.i2c_driver
+            .write(self.mpu_addr, &[MPURegisters::GYRO_CONFIG, register_value])
+            .ok();
     }
 
     fn update_gyro_config_register(&mut self) {
@@ -129,7 +140,7 @@ where
                 &[MPURegisters::ACCEL_MEASURE_START],
                 &mut buf,
             )
-            .unwrap();
+            .ok();
 
         accel_output.x = (buf[0] as i16) << 8 | buf[1] as i16;
         accel_output.y = (buf[2] as i16) << 8 | buf[3] as i16;
@@ -144,7 +155,7 @@ where
 
         self.i2c_driver
             .write_read(self.mpu_addr, &[MPURegisters::GYRO_MEASURE_START], &mut buf)
-            .unwrap();
+            .ok();
 
         gyro_output.x = (buf[0] as i16) << 8 | buf[1] as i16;
         gyro_output.y = (buf[2] as i16) << 8 | buf[3] as i16;
@@ -176,7 +187,7 @@ where
                 self.mpu_addr,
                 &[MPURegisters::POWER_MANAGEMENT, register_value],
             )
-            .unwrap();
+            .ok();
     }
 }
 
@@ -231,7 +242,7 @@ where
                 &[MPURegisters::ACCEL_MEASURE_START],
                 &mut buf,
             )
-            .unwrap();
+            .ok();
 
         accel_output.x = (buf[0] as i16) << 8 | buf[1] as i16;
         accel_output.y = (buf[2] as i16) << 8 | buf[3] as i16;

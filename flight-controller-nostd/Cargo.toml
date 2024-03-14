@@ -15,13 +15,14 @@ opt-level = 2
 opt-level = 3
 
 [dependencies]
-esp32-hal = { version = "0.18.0", features = [
+esp-hal = { version = "0.16.1", features = [
+    "esp32",
     "embassy",
-    "async",
     "embassy-time-timg0",
     "embassy-executor-thread",
+    "embassy-executor-interrupt",
     "eh1",
-    "async"
+    "async",
 ] }
 esp-backtrace = { version = "0.11.0", features = [
     "esp32",
@@ -29,16 +30,17 @@ esp-backtrace = { version = "0.11.0", features = [
     "exception-handler",
     "println",
 ] }
-esp-println = { version = "0.9.0", features = ["esp32"] }
+esp-println = { version = "0.9.0", features = ["esp32", "log"] }
 libm = "0.2.8"
-embassy-time = "0.3.0"
-embassy-executor = { version = "0.5.0", features=['executor-thread'] }
+embassy-time = { version = "0.3.0", features = [
+    "generic-queue-8",
+] } #need this feature (or embassy-executor/integrated-timers) to not fail linker
+embassy-executor = { version = "0.5.0", features = ['executor-thread'] }
 bitfield-struct = "0.6.0"
 shared-definitions = { path = "../shared-definitions", features = ['wifi'] }
 esp-storage = { version = "0.3.0", features = ['esp32'] }
 embedded-storage = "0.3.1"
 static_cell = "2.0.0"
+embedded-hal-async = "1.0.0"
+embedded-io-async = "0.6.1"
 
-
-[features]
-default = ["esp32-hal/xtal-40mhz"]

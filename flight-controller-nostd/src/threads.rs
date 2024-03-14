@@ -1,7 +1,7 @@
 use core::sync::atomic::Ordering;
 
 use embassy_time::Timer;
-use esp32_hal::{
+use esp_hal::{
     clock::Clocks,
     gpio::{self, Gpio12, Gpio13, Gpio14, Gpio16, Gpio17, Gpio21, Gpio22, Gpio27, Unknown},
     i2c::I2C,
@@ -12,7 +12,7 @@ use esp32_hal::{
 };
 
 use crate::{
-    communication_interfaces::ibus::{controller::IBusController, protocol::IbusUartMonitor},
+    communication_interfaces::ibus::{controller::IBusController, protocol::IBusUartMonitor},
     config::{
         constants::{ESC_PWM_FREQUENCY_HZ, MAX_MOTOR_POWER, MIN_POWER, VEHICLE_TYPE},
         store::{AppStoredConfig, ConfigStorage},
@@ -23,7 +23,7 @@ use crate::{
         motors_state_manager::QuadcopterMotorsStateManager,
         vehicle_movement_mappers::{FlyingVehicleMovementMapper, Quadcopter, VehicleTypesMapper},
     },
-    shared_core_values::{SHARED_CONTROLLER_INPUT, SHARED_TELEMETRY},
+    shared_core_values::{AtomicControllerInput, SHARED_CONTROLLER_INPUT, SHARED_TELEMETRY},
 };
 
 // const VOLTAGE_DIVIDER_MULTIPLIER: f32 = 9.648; // 999k + 119k
@@ -64,9 +64,6 @@ pub async fn flight_thread(
         motor_3_pin,
         motor_4_pin,
     );
-
-    // let accelrometer_calibration = AccelerationVector3D::default();
-    // let gyro_calibration = RotationVector3D::default();
 
     let mut config_store = ConfigStorage::new();
     let app_config = AppStoredConfig::default();
@@ -154,7 +151,7 @@ pub async fn telemetry_thread() -> ! {
         esp_println::println!(
             "
                 Iteration Time: {:?}
-                Rotation rate {:?}
+                Rotation {:?}
                 Motor {:?}
                 Throttle {:?}
                 Input Start {}",
@@ -169,12 +166,12 @@ pub async fn telemetry_thread() -> ! {
             telemetry_data.throttle.load(Ordering::Relaxed),
             SHARED_CONTROLLER_INPUT.start.load(Ordering::Relaxed)
         );
-        Timer::after_millis(250).await;
+        Timer::after_millis(1000).await;
     }
 }
 
 #[embassy_executor::task]
-pub async fn input_thread(
+pub async fn controller_input_task(
     tx: Gpio17<Unknown>,
     rx: Gpio16<Unknown>,
     uart: UART2,

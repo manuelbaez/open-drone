@@ -1,13 +1,11 @@
-use esp32_hal::clock::Clocks;
-use esp32_hal::peripheral::Peripheral;
-use esp32_hal::{
-    gpio::{InputPin, OutputPin},
-    prelude::*,
-};
-use esp32_hal::{uart, Uart};
+use embassy_time::Timer;
+use esp_hal::clock::Clocks;
+use esp_hal::gpio::{InputPin, OutputPin};
+use esp_hal::peripheral::Peripheral;
+use esp_hal::{prelude::*, uart, Uart};
 
 use super::protocol::{
-    IBusMessageParser, IbusCommands, IbusTelemetrySensorsIds, IbusUartMonitor, PROTOCOL_OVERHEAD,
+    IBusMessageParser, IBusUartMonitor, IbusCommands, IbusTelemetrySensorsIds, PROTOCOL_OVERHEAD,
     PROTOCOL_SIZE,
 };
 use crate::shared_core_values::AtomicTelemetry;
@@ -99,15 +97,19 @@ where
     }
 }
 
-impl<'a, T> IbusUartMonitor<T> for IBusTelemetry<'a, T>
+impl<'a, T> IBusUartMonitor<T> for IBusTelemetry<'a, T>
 where
     T: uart::Instance,
 {
-    fn read_uart_byte(&mut self) -> Result<u8, ()> {
+    async fn read_uart_bytes(&mut self) -> Result<u8, ()> {
+        while T::get_rx_fifo_count() == 0 {
+            Timer::after_micros(100).await;
+        }
         let result = self.uart_driver.read();
-        if result.is_err() {
+        if !result.is_err() {
             Ok(result.unwrap())
         } else {
+            esp_println::println!("Error: {:?}", result.err());
             Err(())
         }
     }
@@ -158,11 +160,3 @@ where
         T::get_rx_fifo_count()
     }
 }
-// impl<'a, T> RemoteTelemetry for IBusTelemetry<'a, T>
-// where
-//     T: uart::Instance,
-// {
-//     fn start_telemetry_tx_loop(&mut self, shared_telemetry: &AtomicTelemetry) {
-//         self.start_monitor_on_uart();
-//     }
-// }

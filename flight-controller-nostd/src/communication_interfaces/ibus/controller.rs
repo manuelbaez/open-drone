@@ -1,16 +1,18 @@
 use super::protocol::{
-    IbusCommands, IbusUartMonitor, CHANNEL_CENTER_POINT, CHANNEL_MAX_POINT, CHANNEL_MIN_POINT,
+    IBusUartMonitor, IbusCommands, CHANNEL_CENTER_POINT, CHANNEL_MAX_POINT, CHANNEL_MIN_POINT,
     PROTOCOL_CHANNELS, PROTOCOL_OVERHEAD, PROTOCOL_SIZE,
 };
-use crate::shared_core_values::AtomicControllerInput;
+use crate::{config::constants::UART_READ_BUF_SIZE, shared_core_values::AtomicControllerInput};
 
 use core::sync::atomic::Ordering;
-use esp32_hal::{
+use embassy_time::Timer;
+use esp_hal::{
     clock::Clocks,
     gpio::{InputPin, OutputPin},
     peripheral::Peripheral,
     prelude::*,
-    uart, Uart,
+    uart::{self},
+    Uart, UartRx,
 };
 use shared_definitions::controller::ControllerInput;
 
@@ -44,7 +46,7 @@ impl TryFrom<u8> for ChannelMappings {
 }
 
 pub struct IBusController<'a, T> {
-    uart_driver: Uart<'a, T>,
+    uart_driver: UartRx<'a, T>,
     shared_controller_input: &'a AtomicControllerInput,
 }
 
@@ -61,9 +63,18 @@ where
     ) -> Self {
         let uart_config = uart::config::Config::default();
         let uart_pins = uart::TxRxPins::new_tx_rx(tx, rx);
-        let uart_driver = Uart::new_with_config(uart, uart_config, Some(uart_pins), clocks);
+        let mut uart_driver = Uart::new_with_config(uart, uart_config, Some(uart_pins), clocks);
+        // uart_driver.set_at_cmd(AtCmdConfig::new(None, None, None, 0x04, None));
+        uart_driver
+            .set_rx_fifo_full_threshold(UART_READ_BUF_SIZE as u16)
+            .unwrap();
+        uart_driver.set_rx_timeout(Some(1)).unwrap();
+        // uart_driver.listen_rx_fifo_full();
+        // let fifo_set = uart_driver.rx_fifo_full_interrupt_set();
+        // esp_println::println!("Fifo interrupt enabled - {}", fifo_set);
+        let (_tx, rx) = uart_driver.split();
         Self {
-            uart_driver,
+            uart_driver: rx,
             shared_controller_input,
         }
     }
@@ -133,7 +144,7 @@ where
             .store(input_values.kill_motors, Ordering::Relaxed);
         self.shared_controller_input
             .start
-            .store(input_values.start, Ordering::Relaxed);
+            .store(input_values.start, Ordering::SeqCst);
         self.shared_controller_input
             .calibrate_esc
             .store(input_values.calibrate_esc, Ordering::Relaxed);
@@ -143,11 +154,14 @@ where
     }
 }
 
-impl<'a, T> IbusUartMonitor<T> for IBusController<'a, T>
+impl<'a, T> IBusUartMonitor<T> for IBusController<'a, T>
 where
     T: uart::Instance,
 {
-    fn read_uart_byte(&mut self) -> Result<u8, ()> {
+    async fn read_uart_bytes(&mut self) -> Result<u8, ()> {
+        while T::get_rx_fifo_count() == 0 {
+            Timer::after_micros(100).await;
+        }
         let result = self.uart_driver.read();
         if !result.is_err() {
             Ok(result.unwrap())
@@ -175,12 +189,3 @@ where
         T::get_rx_fifo_count()
     }
 }
-
-// impl<'a, T> RemoteControl for IBusController<'a, T>
-// where
-//     T: uart::Instance,
-// {
-//     fn start_input_changes_monitor(&mut self) {
-//         self.start_monitor_on_uart();
-//     }
-// }

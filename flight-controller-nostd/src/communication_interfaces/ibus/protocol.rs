@@ -1,5 +1,4 @@
-use embassy_time::{Duration, Timer};
-use esp32_hal::{prelude::*, uart};
+use esp_hal::uart;
 
 use crate::util::time::get_current_system_time_us;
 
@@ -84,14 +83,13 @@ impl IBusMessageParser {
 
         tx_buffer
     }
-    
 }
 
-pub trait IbusUartMonitor<T>
+pub trait IBusUartMonitor<T>
 where
     T: uart::Instance,
 {
-    fn read_uart_byte(&mut self) -> Result<u8, ()>;
+    async fn read_uart_bytes(&mut self) -> Result<u8, ()>;
     fn get_read_buffer_count(&self) -> u16;
     fn process_ibus_buffer(
         &mut self,
@@ -101,11 +99,12 @@ where
     async fn start_monitor_on_uart<'a>(&mut self) -> ! {
         let mut previous_time = get_current_system_time_us();
         loop {
-            if self.get_read_buffer_count() == 0 {
-                Timer::after(Duration::from_micros(250)).await;
-                continue;
-            };
-            let mut read_byte = self.read_uart_byte().unwrap();
+            // if self.get_read_buffer_count() == 0 {
+            //     Timer::after(Duration::from_micros(250)).await;
+            //     continue;
+            // };
+
+            let mut read_byte = self.read_uart_bytes().await.unwrap();
 
             let current_time = get_current_system_time_us();
             let elapsed_time = current_time - previous_time;
@@ -121,15 +120,24 @@ where
             let mut current_index: usize = 0;
             let mut buffer_processed = false;
 
-            while self.get_read_buffer_count() > 0 {
+            // while self.get_read_buffer_count() > 0
+            loop {
                 if current_index < PROTOCOL_SIZE {
                     raw_message_buffer[current_index] = read_byte;
                 }
+                // esp_println::println!("{}-{}", current_index, current_message_size);
+
                 //Message read completed process the message buffer
                 if !buffer_processed
                     && (current_index >= (PROTOCOL_SIZE - 1)
                         || current_index >= (current_message_size - 1))
                 {
+                    // esp_println::println!(
+                    //     "Message Received {} - {} - {:?}",
+                    //     current_index,
+                    //     current_message_size,
+                    //     raw_message_buffer
+                    // );
                     buffer_processed = true;
                     let parsing_result =
                         IBusMessageParser::extract_and_validate_message_content(raw_message_buffer);
@@ -137,11 +145,11 @@ where
                         let (buffer, size) = parsing_result.unwrap();
                         self.process_ibus_buffer(buffer, size);
                     }
+                    break;
                 }
                 // Read until there is nothing to read then break the loop
                 // and return back to validate for the protocol time gap
-
-                read_byte = self.read_uart_byte().unwrap();
+                read_byte = self.read_uart_bytes().await.unwrap();
                 current_index += 1;
             }
         }

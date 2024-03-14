@@ -1,7 +1,7 @@
 use core::sync::atomic::Ordering;
 
 use embassy_time::Timer;
-use esp32_hal::i2c;
+use esp_hal::i2c;
 use shared_definitions::controller::ControllerInput;
 
 use crate::drivers::{
@@ -47,13 +47,13 @@ pub async fn start_flight_controllers<'a, I: i2c::Instance>(
     mut controllers_out_callback: impl FnMut(MainControlLoopOutCommands) -> (),
 ) -> ! {
     let mut previous_time_us = 0_u64;
-    
+
     let mut rotation_mode_flight_controller = RotationRateFlightController::new();
     let mut angle_flight_controller =
-    AngleModeFlightController::new(MAX_ROTATION_RATE, GYRO_DRIFT_DEG, ACCEL_UNCERTAINTY_DEG);
-    
+        AngleModeFlightController::new(MAX_ROTATION_RATE, GYRO_DRIFT_DEG, ACCEL_UNCERTAINTY_DEG);
+
     let mut drone_on = false;
-    
+
     loop {
         // let time_a = get_current_system_time_us();
         //Read remote control input values
@@ -67,6 +67,9 @@ pub async fn start_flight_controllers<'a, I: i2c::Instance>(
             calibrate_esc: controller_input.calibrate_esc.load(Ordering::Relaxed),
             calibrate_sensors: controller_input.calibrate_sensors.load(Ordering::Relaxed),
         };
+
+        // let mut input_values = ControllerInput::default();
+        // input_values.start = true;
 
         #[cfg(feature = "wifi-tuning")]
         {
@@ -114,7 +117,7 @@ pub async fn start_flight_controllers<'a, I: i2c::Instance>(
                     ))
                 }
 
-                Timer::after_millis(5).await;
+                Timer::after_millis(10).await;
                 continue;
             }
         }
@@ -161,7 +164,7 @@ pub async fn start_flight_controllers<'a, I: i2c::Instance>(
 
         // let time_b = get_current_system_time_us();
 
-        //Store telemetry data
+        //Store debug/telemetry data
         telemetry_data.loop_exec_time_us.store(
             (current_time_us - previous_time_us) as i32,
             Ordering::Relaxed,
@@ -179,5 +182,6 @@ pub async fn start_flight_controllers<'a, I: i2c::Instance>(
                 throttle,
             },
         ));
+        Timer::after_micros(200).await;
     }
 }

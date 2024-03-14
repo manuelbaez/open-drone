@@ -1,4 +1,4 @@
-use esp32_hal::{
+use esp_hal::{
     gpio::{GpioPin, GpioProperties, Output, OutputPin, PushPull},
     ledc::{
         channel::{self, config::PinConfig, ChannelHW, ChannelIFace},
