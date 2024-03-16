@@ -2,25 +2,22 @@
 #![no_main]
 #![feature(const_float_bits_conv)]
 #![feature(generic_const_exprs)]
+#![feature(type_alias_impl_trait)]
 
-use communication_interfaces::ibus::{controller::IBusController, protocol::IBusUartMonitor};
 use embassy_executor::Spawner;
 use embassy_time::Timer;
 use esp_backtrace as _;
 use esp_hal::{
     clock::{ClockControl, Clocks},
     cpu_control::{CpuControl, Stack},
-    embassy::{
-        self,
-        executor::{self, Executor},
-    },
+    embassy::{self, executor::Executor},
     peripherals::Peripherals,
     prelude::*,
-    timer::TimerGroup,
-    Delay, IO,
+    IO,
 };
+
 use static_cell::StaticCell;
-use threads::{controller_input_task, flight_thread, telemetry_thread};
+use threads::{controller_input_task, flight_controller_task, telemetry_task};
 
 mod communication_interfaces;
 mod config;
@@ -32,10 +29,11 @@ mod threads;
 mod util;
 
 static CLOCKS: StaticCell<Clocks> = StaticCell::new();
-static CORE1_EXECUTOR: StaticCell<Executor> = StaticCell::new();
-static mut CORE1_STACK: Stack<16384> = Stack::new();
+static mut APP_CORE_STACK: Stack<8192> = Stack::new();
+
 #[main]
 async fn main(spawner: Spawner) -> ! {
+    // init_heap();
     let peripherals = Peripherals::take();
     let system = peripherals.SYSTEM.split();
     let clocks = ClockControl::max(system.clock_control).freeze();
@@ -51,19 +49,7 @@ async fn main(spawner: Spawner) -> ! {
 
     let io = IO::new(peripherals.GPIO, peripherals.IO_MUX);
 
-    spawner
-        .spawn(flight_thread(
-            peripherals.I2C0,
-            io.pins.gpio21,
-            io.pins.gpio22,
-            peripherals.LEDC,
-            io.pins.gpio13.into_push_pull_output(),
-            io.pins.gpio12.into_push_pull_output(),
-            io.pins.gpio14.into_push_pull_output(),
-            io.pins.gpio27.into_push_pull_output(),
-            clocks,
-        ))
-        .unwrap();
+    // spawner.spawn(telemetry_task()).unwrap();
 
     spawner
         .spawn(controller_input_task(
@@ -73,15 +59,28 @@ async fn main(spawner: Spawner) -> ! {
             clocks,
         ))
         .unwrap();
-    
+
     let cpu1_fn = || {
-        let executor = CORE1_EXECUTOR.init(Executor::new());
+        static APP_CORE_EXECUTOR: StaticCell<Executor> = StaticCell::new();
+        let executor = APP_CORE_EXECUTOR.init(Executor::new());
         executor.run(|spawner| {
-            spawner.spawn(telemetry_thread()).unwrap();
+            spawner
+                .spawn(flight_controller_task(
+                    peripherals.I2C0,
+                    io.pins.gpio21,
+                    io.pins.gpio22,
+                    peripherals.LEDC,
+                    io.pins.gpio13.into_push_pull_output(),
+                    io.pins.gpio12.into_push_pull_output(),
+                    io.pins.gpio14.into_push_pull_output(),
+                    io.pins.gpio27.into_push_pull_output(),
+                    clocks,
+                ))
+                .unwrap();
         });
     };
     let _guard = cpu_control
-        .start_app_core(unsafe { &mut CORE1_STACK }, cpu1_fn)
+        .start_app_core(unsafe { &mut APP_CORE_STACK }, cpu1_fn)
         .unwrap();
 
     let mut count = 0;

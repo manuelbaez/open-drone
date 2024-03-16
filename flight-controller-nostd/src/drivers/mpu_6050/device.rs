@@ -55,9 +55,6 @@ where
     }
 
     pub async fn init(&mut self) {
-        Timer::after_millis(100).await;
-        self.reset_device();
-        Timer::after_millis(100).await;
         self.update_gyro_config_register();
         Timer::after_millis(100).await;
         self.update_accel_config_register();
@@ -88,14 +85,15 @@ where
         self.update_accel_config_register();
     }
 
-    fn reset_device(&mut self) {
+    pub async fn reset_device(&mut self) {
         let register_value = MpuPowerManagementRegister::new()
             .with_device_reset(true)
             .with_sleep(true)
             .into_bits();
         self.i2c_driver
             .write(self.mpu_addr, &[MPURegisters::GYRO_CONFIG, register_value])
-            .ok();
+            .unwrap();
+        Timer::after_micros(200).await;
     }
 
     fn update_gyro_config_register(&mut self) {

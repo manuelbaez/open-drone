@@ -57,7 +57,7 @@ pub async fn start_flight_controllers<'a, I: i2c::Instance>(
     loop {
         // let time_a = get_current_system_time_us();
         //Read remote control input values
-        let input_values = ControllerInput {
+        let mut input_values = ControllerInput {
             roll: controller_input.roll.load(Ordering::Relaxed),
             pitch: controller_input.pitch.load(Ordering::Relaxed),
             yaw: controller_input.yaw.load(Ordering::Relaxed),
@@ -164,7 +164,7 @@ pub async fn start_flight_controllers<'a, I: i2c::Instance>(
 
         // let time_b = get_current_system_time_us();
 
-        //Store debug/telemetry data
+        // Store debug/telemetry data
         telemetry_data.loop_exec_time_us.store(
             (current_time_us - previous_time_us) as i32,
             Ordering::Relaxed,
@@ -182,6 +182,6 @@ pub async fn start_flight_controllers<'a, I: i2c::Instance>(
                 throttle,
             },
         ));
-        Timer::after_micros(200).await;
+        // Timer::after_micros(1000).await;
     }
 }

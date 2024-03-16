@@ -39,7 +39,7 @@ impl AtomicControllerInput {
             yaw: AtomicI16::new(0),
             throttle: AtomicU8::new(0),
             kill_motors: AtomicBool::new(false),
-            start: AtomicBool::new(true),
+            start: AtomicBool::new(false),
             calibrate_esc: AtomicBool::new(false),
             calibrate_sensors: AtomicBool::new(false),
         }
@@ -68,7 +68,7 @@ impl AtomicRotationVector3D {
         self.yaw
             .store((vector.yaw * 100.0) as i16, Ordering::Relaxed);
     }
-    pub fn read(&self) -> RotationVector3D {
+    pub fn read(&self, ) -> RotationVector3D {
         RotationVector3D {
             roll: self.roll.load(Ordering::Relaxed) as f32 / 100.0,
             pitch: self.pitch.load(Ordering::Relaxed) as f32 / 100.0,

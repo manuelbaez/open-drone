@@ -10,28 +10,36 @@ use esp_hal::{
     prelude::*,
     uart,
 };
+use crate::{control::{control_loops::FlightStabilizerOut, flight_controllers::{AngleModeControllerInput, RotationRateControllerInput}}, drivers::imu_sensors::{Accelerometer, CombinedGyroscopeAccelerometer, Gyroscope}, util::math::vectors::RotationVector2D};
+use shared_definitions::controller::ControllerInput;
 
 use crate::{
     communication_interfaces::ibus::{controller::IBusController, protocol::IBusUartMonitor},
     config::{
-        constants::{ESC_PWM_FREQUENCY_HZ, MAX_MOTOR_POWER, MIN_POWER, VEHICLE_TYPE},
+        constants::{
+            ACCEL_UNCERTAINTY_DEG, ESC_PWM_FREQUENCY_HZ, GYRO_DRIFT_DEG, MAX_INCLINATION, MAX_MOTOR_POWER, MAX_ROTATION_RATE, MAX_THROTTLE, MIN_POWER, VEHICLE_TYPE
+        },
         store::{AppStoredConfig, ConfigStorage},
     },
-    control::control_loops::{start_flight_controllers, MainControlLoopOutCommands},
+    control::{
+        control_loops::{start_flight_controllers, MainControlLoopOutCommands},
+        flight_controllers::{AngleModeFlightController, RotationRateFlightController},
+    },
     drivers::mpu_6050::{device::MPU6050Sensor, registers::LowPassFrequencyValues},
     output::{
         motors_state_manager::QuadcopterMotorsStateManager,
         vehicle_movement_mappers::{FlyingVehicleMovementMapper, Quadcopter, VehicleTypesMapper},
     },
-    shared_core_values::{AtomicControllerInput, SHARED_CONTROLLER_INPUT, SHARED_TELEMETRY},
+    shared_core_values::{AtomicControllerInput, SHARED_CONTROLLER_INPUT, SHARED_TELEMETRY}, util::{math::vectors::RotationVector3D, time::get_current_system_time_us},
 };
 
 // const VOLTAGE_DIVIDER_MULTIPLIER: f32 = 9.648; // 999k + 119k
 // const ADC_1_VOLT: u16 = 672_u16;
 // const MULTPLIER: f32 = (1.0 / ADC_1_VOLT as f32) * VOLTAGE_DIVIDER_MULTIPLIER;
+const US_IN_SECOND: f32 = 1_000_000.0_f32;
 
 #[embassy_executor::task]
-pub async fn flight_thread(
+pub async fn flight_controller_task(
     i2c_dev: I2C0,
     sda: Gpio21<Unknown>,
     scl: Gpio22<Unknown>,
@@ -72,10 +80,12 @@ pub async fn flight_thread(
 
     let mut i2c_driver = I2C::new(i2c_dev, sda, scl, 400_u32.kHz(), clocks);
     let mut imu = MPU6050Sensor::new(&mut i2c_driver, gyro_calibration, accelerometer_calibration);
+    imu.reset_device().await;
     imu.enable_low_pass_filter(LowPassFrequencyValues::Freq10Hz);
-    imu.init().await;
+    imu.init().await; // Check why this was giving a Load prohibited when was async
+    Timer::after_micros(200).await;
 
-    let output_handler = match VEHICLE_TYPE {
+    let mut output_handler = match VEHICLE_TYPE {
         VehicleTypesMapper::Quadcopter => {
             let quadcoper_movement_mapper = Quadcopter::new(MIN_POWER, MAX_MOTOR_POWER);
             move |result| match result {
@@ -90,17 +100,17 @@ pub async fn flight_thread(
                         accelerometer_calibration: accelerometer,
                         gyro_calibration: gyro,
                     };
-                    let result = config_store.store_to_flash(config);
-                    if result.is_err() {
-                        match result.err() {
-                            Some(e) => {
-                                esp_println::println!("{:?}", e)
-                            }
-                            None => (),
-                        };
-                    } else {
-                        result.unwrap();
-                    }
+                    // let result = config_store.store_to_flash(config);
+                    // if result.is_err() {
+                    //     match result.err() {
+                    //         Some(e) => {
+                    //             esp_println::println!("{:?}", e)
+                    //         }
+                    //         None => (),
+                    //     };
+                    // } else {
+                    //     result.unwrap();
+                    // }
                     // drop(config_lock);
                 }
                 MainControlLoopOutCommands::UpdateFlightState(state) => {
@@ -134,7 +144,6 @@ pub async fn flight_thread(
             }
         }
     };
-
     start_flight_controllers(
         controller_input_shared,
         imu,
@@ -142,10 +151,11 @@ pub async fn flight_thread(
         output_handler,
     )
     .await
+
 }
 
 #[embassy_executor::task]
-pub async fn telemetry_thread() -> ! {
+pub async fn telemetry_task() -> ! {
     let telemetry_data = &SHARED_TELEMETRY;
     loop {
         esp_println::println!(
