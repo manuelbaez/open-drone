@@ -1,13 +1,20 @@
 use core::fmt;
 use std::fmt::{Debug, Display, Formatter};
 
-#[derive(Debug, Clone)]
-pub struct AppError {
-    pub message: String,
+#[derive(Debug)]
+pub struct AppError<E>
+where
+    E: Debug,
+{
+    pub message: &'static str,
+    pub error: E,
 }
 
-impl Display for AppError {
+impl<E> Display for AppError<E>
+where
+    E: Debug,
+{
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        write!(f, "{}", self.message)
+        write!(f, "{} {:?}", self.message, self.error)
     }
 }

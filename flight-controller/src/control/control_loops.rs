@@ -46,7 +46,7 @@ pub fn start_flight_controllers(
     mut imu: MPU6050Sensor<I2cDriver<'_>>,
     telemetry_data: &AtomicTelemetry,
     mut controllers_out_callback: impl FnMut(MainControlLoopOutCommands) -> (),
-) {
+) -> ! {
     let mut previous_time_us = 0_i64;
 
     let mut rotation_mode_flight_controller = RotationRateFlightController::new();

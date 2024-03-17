@@ -1,14 +1,15 @@
-use std::sync::Mutex;
+use crate::util::{
+    error::AppError,
+    math::vectors::{AccelerationVector3D, RotationVector3D},
+};
+use esp_idf_svc::{
+    nvs::{EspDefaultNvsPartition, EspNvs, EspNvsPartition, NvsDefault},
+    sys::EspError,
+};
 
-use embedded_storage::{ReadStorage, Storage};
-use esp_storage::FlashStorage;
-use once_cell::sync::Lazy;
+const BLOB_NAME: &str = "config";
 
-use crate::util::math::vectors::{AccelerationVector3D, RotationVector3D};
-
-const FLASH_ADDR: u32 = 0x9000;
-
-pub static APP_CONFIG_STORE: Lazy<Mutex<ConfigStorage>> = Lazy::new(|| Mutex::new(ConfigStorage::new()));
+// pub static APP_CONFIG_STORE: Lazy<Mutex<ConfigStorage>> = Lazy::new(|| Mutex::new(ConfigStorage::new()));
 
 #[derive(Default)]
 pub struct AppStoredConfig {
@@ -17,26 +18,40 @@ pub struct AppStoredConfig {
 }
 
 pub struct ConfigStorage {
-    flash: FlashStorage,
+    flash: EspNvs<NvsDefault>,
 }
 
 impl ConfigStorage {
     pub fn new() -> Self {
-        ConfigStorage {
-            flash: FlashStorage::new(),
-        }
+        let nvs_default_partition: EspNvsPartition<NvsDefault> =
+            EspDefaultNvsPartition::take().unwrap();
+        let namespace = "app_config";
+        let flash = EspNvs::new(nvs_default_partition, namespace, true)
+            .expect("Could not get nvs partition");
+        ConfigStorage { flash }
     }
-    pub fn store_to_flash(&mut self, config: AppStoredConfig) {
+    pub fn store_to_flash(
+        &mut self,
+        config: AppStoredConfig,
+    ) -> Result<(), AppError<Option<EspError>>> {
         let data_buffer = unsafe {
             core::slice::from_raw_parts(
                 &config as *const _ as *mut u8,
                 core::mem::size_of::<AppStoredConfig>(),
             )
         };
-        self.flash.write(FLASH_ADDR, data_buffer).unwrap();
+        let result = self.flash.set_blob(BLOB_NAME, data_buffer);
+        if result.is_err() {
+            Err(AppError {
+                message: &"Failed to store the config",
+                error: result.err(),
+            })
+        } else {
+            Ok(())
+        }
     }
 
-    pub fn load_from_flash(&mut self) -> AppStoredConfig {
+    pub fn load_from_flash(&mut self) -> Result<AppStoredConfig, AppError<Option<EspError>>> {
         let config = AppStoredConfig::default();
         let data_buffer = unsafe {
             core::slice::from_raw_parts_mut(
@@ -44,7 +59,14 @@ impl ConfigStorage {
                 core::mem::size_of::<AppStoredConfig>(),
             )
         };
-        self.flash.read(FLASH_ADDR, data_buffer).unwrap();
-        config
+        let result = self.flash.get_blob(BLOB_NAME, data_buffer);
+        if result.is_err() {
+            Err(AppError {
+                message: &"Failed to store the config",
+                error: result.err(),
+            })
+        } else {
+            Ok(config)
+        }
     }
 }

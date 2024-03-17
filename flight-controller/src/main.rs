@@ -38,34 +38,17 @@ pub static SHARED_PERIPHERALS: Lazy<Mutex<Peripherals>> =
 
 unsafe extern "C" fn flight_thread_task(_params: *mut core::ffi::c_void) {
     flight_thread();
-    vTaskDelete(std::ptr::null_mut());
 }
 
-fn main() {
-    esp_idf_svc::sys::link_patches();
-    esp_idf_svc::log::EspLogger::initialize_default();
+unsafe extern "C" fn telemetry_thread_task(_params: *mut core::ffi::c_void) {
+    telemetry_thread();
+}
 
-    let _telemetry = std::thread::Builder::new().stack_size(4096).spawn(|| {
-        telemetry_thread();
-    });
+unsafe extern "C" fn measurements_thread_task(_params: *mut core::ffi::c_void) {
+    measurements_thread();
+}
 
-    let _measurements = std::thread::Builder::new().stack_size(4096).spawn(|| {
-        measurements_thread();
-    });
-    log::info!("Running");
-
-    unsafe {
-        xTaskCreatePinnedToCore(
-            Some(flight_thread_task),
-            std::ptr::null_mut(),
-            4096,
-            std::ptr::null_mut(),
-            1,
-            std::ptr::null_mut(),
-            1,
-        )
-    };
-
+unsafe extern "C" fn comms_thread_task(_params: *mut core::ffi::c_void) {
     #[cfg(feature = "wifi")]
     {
         let controller = WifiRemoteControl::new(WIFI_CONTROLLER_CHANNEL);
@@ -90,4 +73,59 @@ fn main() {
         drop(peripherals_lock);
         controller.start_input_changes_monitor(&SHARED_CONTROLLER_INPUT)
     }
+}
+
+fn main() {
+    esp_idf_svc::sys::link_patches();
+    esp_idf_svc::log::EspLogger::initialize_default();
+
+    log::info!("Running");
+
+    unsafe {
+        xTaskCreatePinnedToCore(
+            Some(flight_thread_task),
+            std::ptr::null_mut(),
+            4096,
+            std::ptr::null_mut(),
+            1,
+            std::ptr::null_mut(),
+            1,
+        )
+    };
+
+    unsafe {
+        xTaskCreatePinnedToCore(
+            Some(telemetry_thread_task),
+            std::ptr::null_mut(),
+            3072,
+            std::ptr::null_mut(),
+            3,
+            std::ptr::null_mut(),
+            0,
+        )
+    };
+
+    unsafe {
+        xTaskCreatePinnedToCore(
+            Some(measurements_thread_task),
+            std::ptr::null_mut(),
+            3072,
+            std::ptr::null_mut(),
+            2,
+            std::ptr::null_mut(),
+            0,
+        )
+    };
+
+    unsafe {
+        xTaskCreatePinnedToCore(
+            Some(comms_thread_task),
+            std::ptr::null_mut(),
+            4096,
+            std::ptr::null_mut(),
+            1,
+            std::ptr::null_mut(),
+            0,
+        )
+    };
 }
