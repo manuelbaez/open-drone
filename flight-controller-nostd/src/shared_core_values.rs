@@ -39,7 +39,7 @@ impl AtomicControllerInput {
             yaw: AtomicI16::new(0),
             throttle: AtomicU8::new(0),
             kill_motors: AtomicBool::new(false),
-            start: AtomicBool::new(true),
+            start: AtomicBool::new(false),
             calibrate_esc: AtomicBool::new(false),
             calibrate_sensors: AtomicBool::new(false),
         }

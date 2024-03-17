@@ -2,25 +2,23 @@
 #![no_main]
 #![feature(const_float_bits_conv)]
 #![feature(generic_const_exprs)]
+#![feature(type_alias_impl_trait)]
 
-use communication_interfaces::ibus::{controller::IBusController, protocol::IBusUartMonitor};
 use embassy_executor::Spawner;
 use embassy_time::Timer;
+use embedded_hal_async::delay;
 use esp_backtrace as _;
 use esp_hal::{
     clock::{ClockControl, Clocks},
     cpu_control::{CpuControl, Stack},
-    embassy::{
-        self,
-        executor::{self, Executor},
-    },
+    embassy::{self, executor::Executor},
     peripherals::Peripherals,
     prelude::*,
-    timer::TimerGroup,
-    Delay, IO,
+    IO,
 };
+
 use static_cell::StaticCell;
-use threads::{controller_input_task, flight_thread, telemetry_thread};
+use threads::{controller_input_task, flight_controller_task, telemetry_task};
 
 mod communication_interfaces;
 mod config;
@@ -32,17 +30,21 @@ mod threads;
 mod util;
 
 static CLOCKS: StaticCell<Clocks> = StaticCell::new();
-static CORE1_EXECUTOR: StaticCell<Executor> = StaticCell::new();
-static mut CORE1_STACK: Stack<16384> = Stack::new();
+static mut APP_CORE_STACK: Stack<8192> = Stack::new();
+
 #[main]
 async fn main(spawner: Spawner) -> ! {
+    // init_heap();
     let peripherals = Peripherals::take();
     let system = peripherals.SYSTEM.split();
     let clocks = ClockControl::max(system.clock_control).freeze();
     let clocks = CLOCKS.init(clocks);
 
-    let timer = esp_hal::timer::TimerGroup::new(peripherals.TIMG0, clocks);
-    embassy::init(clocks, timer);
+    let timer_group0 = esp_hal::timer::TimerGroup::new(peripherals.TIMG0, clocks);
+    embassy::init(clocks, timer_group0);
+    let timer_group1 = esp_hal::timer::TimerGroup::new(peripherals.TIMG1, clocks);
+    let mut wdt1 = timer_group1.wdt;
+    wdt1.disable();
 
     let mut cpu_control = CpuControl::new(system.cpu_control);
 
@@ -51,8 +53,19 @@ async fn main(spawner: Spawner) -> ! {
 
     let io = IO::new(peripherals.GPIO, peripherals.IO_MUX);
 
+    // spawner.spawn(telemetry_task()).unwrap();
     spawner
-        .spawn(flight_thread(
+        .spawn(controller_input_task(
+            io.pins.gpio17,
+            io.pins.gpio16,
+            peripherals.UART2,
+            clocks,
+        ))
+        .unwrap();
+
+    let cpu1_fn = || {
+        // let mut delay = esp_hal::Delay::new(clocks);
+        flight_controller_task(
             peripherals.I2C0,
             io.pins.gpio21,
             io.pins.gpio22,
@@ -62,26 +75,10 @@ async fn main(spawner: Spawner) -> ! {
             io.pins.gpio14.into_push_pull_output(),
             io.pins.gpio27.into_push_pull_output(),
             clocks,
-        ))
-        .unwrap();
-
-    spawner
-        .spawn(controller_input_task(
-            io.pins.gpio17,
-            io.pins.gpio16,
-            peripherals.UART2,
-            clocks,
-        ))
-        .unwrap();
-    
-    let cpu1_fn = || {
-        let executor = CORE1_EXECUTOR.init(Executor::new());
-        executor.run(|spawner| {
-            spawner.spawn(telemetry_thread()).unwrap();
-        });
+        );
     };
     let _guard = cpu_control
-        .start_app_core(unsafe { &mut CORE1_STACK }, cpu1_fn)
+        .start_app_core(unsafe { &mut APP_CORE_STACK }, cpu1_fn)
         .unwrap();
 
     let mut count = 0;

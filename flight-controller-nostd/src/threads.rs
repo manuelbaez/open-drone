@@ -6,10 +6,11 @@ use esp_hal::{
     gpio::{self, Gpio12, Gpio13, Gpio14, Gpio16, Gpio17, Gpio21, Gpio22, Gpio27, Unknown},
     i2c::I2C,
     ledc::{self, timer, LSGlobalClkSource, LEDC},
+    peripheral::Peripheral,
     peripherals::{self, I2C0, UART2},
     prelude::*,
-    uart,
 };
+use static_cell::StaticCell;
 
 use crate::{
     communication_interfaces::ibus::{controller::IBusController, protocol::IBusUartMonitor},
@@ -23,15 +24,17 @@ use crate::{
         motors_state_manager::QuadcopterMotorsStateManager,
         vehicle_movement_mappers::{FlyingVehicleMovementMapper, Quadcopter, VehicleTypesMapper},
     },
-    shared_core_values::{AtomicControllerInput, SHARED_CONTROLLER_INPUT, SHARED_TELEMETRY},
+    shared_core_values::{SHARED_CONTROLLER_INPUT, SHARED_TELEMETRY},
 };
 
 // const VOLTAGE_DIVIDER_MULTIPLIER: f32 = 9.648; // 999k + 119k
 // const ADC_1_VOLT: u16 = 672_u16;
 // const MULTPLIER: f32 = (1.0 / ADC_1_VOLT as f32) * VOLTAGE_DIVIDER_MULTIPLIER;
+const US_IN_SECOND: f32 = 1_000_000.0_f32;
+static I2C_DRIVER: StaticCell<I2C<'_, <I2C0 as Peripheral>::P>> = StaticCell::new();
+static IMU_DRIVER: StaticCell<MPU6050Sensor<'_, <I2C0 as Peripheral>::P>> = StaticCell::new();
 
-#[embassy_executor::task]
-pub async fn flight_thread(
+pub fn flight_controller_task(
     i2c_dev: I2C0,
     sda: Gpio21<Unknown>,
     scl: Gpio22<Unknown>,
@@ -42,6 +45,9 @@ pub async fn flight_thread(
     motor_4_pin: Gpio27<gpio::Output<gpio::PushPull>>,
     clocks: &'static Clocks<'static>,
 ) -> ! {
+    // static DELAY: StaticCell<esp_hal::Delay> = StaticCell::new();
+    // let delay = DELAY.init(esp_hal::Delay::new(clocks));
+
     let controller_input_shared = &SHARED_CONTROLLER_INPUT;
     let telemetry_shared = &SHARED_TELEMETRY;
 
@@ -70,10 +76,17 @@ pub async fn flight_thread(
     let accelerometer_calibration = app_config.accelerometer_calibration.clone();
     let gyro_calibration = app_config.gyro_calibration.clone();
 
-    let mut i2c_driver = I2C::new(i2c_dev, sda, scl, 400_u32.kHz(), clocks);
-    let mut imu = MPU6050Sensor::new(&mut i2c_driver, gyro_calibration, accelerometer_calibration);
+    let i2c_driver = I2C_DRIVER.init(I2C::new(i2c_dev, sda, scl, 400_u32.kHz(), clocks));
+    let imu = IMU_DRIVER.init(MPU6050Sensor::new(
+        i2c_driver,
+        gyro_calibration,
+        accelerometer_calibration,
+        esp_hal::Delay::new(clocks),
+    ));
+    imu.reset_device();
     imu.enable_low_pass_filter(LowPassFrequencyValues::Freq10Hz);
-    imu.init().await;
+    imu.init(); // Check why this was giving a Load prohibited when was async
+                // Timer::after_micros(200).await;
 
     let output_handler = match VEHICLE_TYPE {
         VehicleTypesMapper::Quadcopter => {
@@ -90,17 +103,17 @@ pub async fn flight_thread(
                         accelerometer_calibration: accelerometer,
                         gyro_calibration: gyro,
                     };
-                    let result = config_store.store_to_flash(config);
-                    if result.is_err() {
-                        match result.err() {
-                            Some(e) => {
-                                esp_println::println!("{:?}", e)
-                            }
-                            None => (),
-                        };
-                    } else {
-                        result.unwrap();
-                    }
+                    // let result = config_store.store_to_flash(config);
+                    // if result.is_err() {
+                    //     match result.err() {
+                    //         Some(e) => {
+                    //             esp_println::println!("{:?}", e)
+                    //         }
+                    //         None => (),
+                    //     };
+                    // } else {
+                    //     result.unwrap();
+                    // }
                     // drop(config_lock);
                 }
                 MainControlLoopOutCommands::UpdateFlightState(state) => {
@@ -134,18 +147,18 @@ pub async fn flight_thread(
             }
         }
     };
-
+    
     start_flight_controllers(
         controller_input_shared,
         imu,
         telemetry_shared,
+        esp_hal::Delay::new(clocks),
         output_handler,
     )
-    .await
 }
 
 #[embassy_executor::task]
-pub async fn telemetry_thread() -> ! {
+pub async fn telemetry_task() -> ! {
     let telemetry_data = &SHARED_TELEMETRY;
     loop {
         esp_println::println!(
@@ -166,7 +179,7 @@ pub async fn telemetry_thread() -> ! {
             telemetry_data.throttle.load(Ordering::Relaxed),
             SHARED_CONTROLLER_INPUT.start.load(Ordering::Relaxed)
         );
-        Timer::after_millis(1000).await;
+        Timer::after_millis(250).await;
     }
 }
 

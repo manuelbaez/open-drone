@@ -1,7 +1,8 @@
 use core::sync::atomic::Ordering;
 
 use embassy_time::Timer;
-use esp_hal::i2c;
+
+use esp_hal::{i2c, prelude::*};
 use shared_definitions::controller::ControllerInput;
 
 use crate::drivers::{
@@ -40,10 +41,11 @@ pub struct FlightStabilizerOut {
     pub rotation_output_command: RotationVector3D,
 }
 
-pub async fn start_flight_controllers<'a, I: i2c::Instance>(
+pub fn start_flight_controllers<'a, I: i2c::Instance>(
     controller_input: &'a AtomicControllerInput,
-    mut imu: MPU6050Sensor<'a, I>,
+    imu: &'a mut MPU6050Sensor<'a, I>,
     telemetry_data: &'a AtomicTelemetry,
+    mut delay: esp_hal::Delay,
     mut controllers_out_callback: impl FnMut(MainControlLoopOutCommands) -> (),
 ) -> ! {
     let mut previous_time_us = 0_u64;
@@ -56,7 +58,7 @@ pub async fn start_flight_controllers<'a, I: i2c::Instance>(
 
     loop {
         // let time_a = get_current_system_time_us();
-        //Read remote control input values
+        // Read remote control input values
         let input_values = ControllerInput {
             roll: controller_input.roll.load(Ordering::Relaxed),
             pitch: controller_input.pitch.load(Ordering::Relaxed),
@@ -117,7 +119,8 @@ pub async fn start_flight_controllers<'a, I: i2c::Instance>(
                     ))
                 }
 
-                Timer::after_millis(10).await;
+                delay.delay_ms(10_u32);
+                // Timer::after_millis(10).await;
                 continue;
             }
         }
@@ -164,7 +167,7 @@ pub async fn start_flight_controllers<'a, I: i2c::Instance>(
 
         // let time_b = get_current_system_time_us();
 
-        //Store debug/telemetry data
+        // Store debug/telemetry data
         telemetry_data.loop_exec_time_us.store(
             (current_time_us - previous_time_us) as i32,
             Ordering::Relaxed,
@@ -182,6 +185,7 @@ pub async fn start_flight_controllers<'a, I: i2c::Instance>(
                 throttle,
             },
         ));
-        Timer::after_micros(200).await;
+        // delay.delay_ms(8_u32);
+        // Timer::after_micros(1000).await;
     }
 }
