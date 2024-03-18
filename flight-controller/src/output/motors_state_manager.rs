@@ -35,9 +35,10 @@ impl QuadcopterMotorsStateManager {
     }
 
     pub fn set_motor_power(&mut self, values: [f32; 4]) {
-        for (index, value) in values.into_iter().enumerate() {
-            self.controllers[index].set_motor_speed(value);
-        }
+        self.controllers[0].set_motor_speed(values[0]);
+        self.controllers[1].set_motor_speed(values[1]);
+        self.controllers[2].set_motor_speed(values[2]);
+        self.controllers[3].set_motor_speed(values[3]);
     }
 
     pub fn kill_motors(&mut self) {

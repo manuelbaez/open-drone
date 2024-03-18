@@ -2,7 +2,7 @@ use std::ops::{Add, AddAssign, Div, Sub};
 
 use libm::{atan2f, sqrtf};
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Copy)]
 pub struct AccelerationVector3D {
     pub x: f32,
     pub y: f32,
@@ -53,7 +53,7 @@ impl Div<f32> for AccelerationVector3D {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Copy)]
 pub struct RotationVector3D {
     pub pitch: f32,
     pub roll: f32,

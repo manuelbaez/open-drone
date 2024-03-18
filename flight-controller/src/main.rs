@@ -17,10 +17,11 @@ use crate::communication_interfaces::i2c::*;
 use crate::shared_core_values::{SHARED_CONTROLLER_INPUT, SHARED_TELEMETRY};
 use crate::threads::{flight_thread, measurements_thread, telemetry_thread};
 use esp_idf_svc::hal::peripherals::Peripherals;
-use esp_idf_svc::sys::{vTaskDelete, xTaskCreatePinnedToCore};
+use esp_idf_svc::sys::xTaskCreatePinnedToCore;
 use once_cell::sync::Lazy;
 use std::ops::DerefMut;
 use std::sync::Mutex;
+use threads::imu_measurements_task_start;
 
 #[cfg(feature = "ibus-controller")]
 use {
@@ -35,6 +36,10 @@ use {
 
 pub static SHARED_PERIPHERALS: Lazy<Mutex<Peripherals>> =
     Lazy::new(|| Mutex::new(Peripherals::take().unwrap()));
+
+unsafe extern "C" fn imu_measurements_task(_params: *mut core::ffi::c_void) {
+    imu_measurements_task_start();
+}
 
 unsafe extern "C" fn flight_thread_task(_params: *mut core::ffi::c_void) {
     flight_thread();
@@ -84,6 +89,18 @@ fn main() {
     unsafe {
         xTaskCreatePinnedToCore(
             Some(flight_thread_task),
+            std::ptr::null_mut(),
+            4096,
+            std::ptr::null_mut(),
+            1,
+            std::ptr::null_mut(),
+            1,
+        )
+    };
+
+    unsafe {
+        xTaskCreatePinnedToCore(
+            Some(imu_measurements_task),
             std::ptr::null_mut(),
             4096,
             std::ptr::null_mut(),

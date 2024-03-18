@@ -1,3 +1,5 @@
+use std::sync::Mutex;
+
 use crate::util::{
     error::AppError,
     math::vectors::{AccelerationVector3D, RotationVector3D},
@@ -6,10 +8,11 @@ use esp_idf_svc::{
     nvs::{EspDefaultNvsPartition, EspNvs, EspNvsPartition, NvsDefault},
     sys::EspError,
 };
+use once_cell::sync::Lazy;
 
 const BLOB_NAME: &str = "config";
 
-// pub static APP_CONFIG_STORE: Lazy<Mutex<ConfigStorage>> = Lazy::new(|| Mutex::new(ConfigStorage::new()));
+pub static APP_CONFIG_STORE: Lazy<Mutex<ConfigStorage>> = Lazy::new(|| Mutex::new(ConfigStorage::new()));
 
 #[derive(Default)]
 pub struct AppStoredConfig {

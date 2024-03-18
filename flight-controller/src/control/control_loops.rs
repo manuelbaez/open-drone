@@ -1,6 +1,8 @@
-use std::sync::atomic::Ordering;
+use std::{mem, sync::atomic::Ordering};
 
-use esp_idf_svc::hal::{delay::FreeRtos, i2c::I2cDriver};
+use esp_idf_svc::hal::delay::BLOCK;
+use esp_idf_svc::hal::{delay::FreeRtos, i2c::I2cDriver, task::queue::Queue};
+use once_cell::sync::Lazy;
 use shared_definitions::controller::ControllerInput;
 
 use crate::{
@@ -28,6 +30,16 @@ use {crate::shared_core_values::SHARED_TUNING, shared_definitions::controller::P
 
 const US_IN_SECOND: f32 = 1_000_000.0_f32;
 
+#[derive(Clone, Copy)]
+struct ImuMeasurement {
+    measurement_time: i64,
+    rotation_rates: RotationVector3D,
+    acceleration: AccelerationVector3D,
+}
+
+pub static IMU_MEASUREMENTS_QUEUE: Lazy<Queue<ImuMeasurement>> =
+    Lazy::new(|| Queue::new(mem::size_of::<ImuMeasurement>()));
+
 pub enum MainControlLoopOutCommands {
     KillMotors,
     UpdateFlightState(FlightStabilizerOut),
@@ -41,13 +53,29 @@ pub struct FlightStabilizerOut {
     pub rotation_output_command: RotationVector3D,
 }
 
-pub fn start_flight_controllers(
+pub fn start_imu_measurements_loop(mut imu: MPU6050Sensor<I2cDriver<'_>>) ->! {
+    loop {
+        let (rotation_rates, acceleration) = imu.get_combined_gyro_accel_output();
+        IMU_MEASUREMENTS_QUEUE
+            .send_back(
+                ImuMeasurement {
+                    measurement_time: get_current_system_time(),
+                    rotation_rates,
+                    acceleration,
+                },
+                0,
+            )
+            .ok();
+    }
+}
+
+pub fn start_flight_controller_processing_loop(
     controller_input: &AtomicControllerInput,
-    mut imu: MPU6050Sensor<I2cDriver<'_>>,
     telemetry_data: &AtomicTelemetry,
     mut controllers_out_callback: impl FnMut(MainControlLoopOutCommands) -> (),
 ) -> ! {
-    let mut previous_time_us = 0_i64;
+    let mut previous_measurement_time_us = 0_i64;
+    let mut previous_execution_time_us = 0_i64;
 
     let mut rotation_mode_flight_controller = RotationRateFlightController::new();
     let mut angle_flight_controller =
@@ -56,6 +84,13 @@ pub fn start_flight_controllers(
     let mut drone_on = false;
 
     loop {
+        let imu_measurement = IMU_MEASUREMENTS_QUEUE.recv_front(BLOCK);
+        let imu_measurement = match imu_measurement {
+            Some(measurement) => measurement.0,
+            None => {
+                continue;
+            }
+        };
         //Read remote control input values
         let input_values = ControllerInput {
             roll: controller_input.roll.load(Ordering::Relaxed),
@@ -98,21 +133,21 @@ pub fn start_flight_controllers(
                     ));
                 }
 
-                if input_values.calibrate_sensors {
-                    log::info!("Calibrating gyro");
-                    let gyro_calibration_values = imu.calculate_drift_average();
-                    imu.set_drift_calibration(gyro_calibration_values.clone());
-                    log::info!("Gyro calibrated");
+                // if input_values.calibrate_sensors {
+                //     log::info!("Calibrating gyro");
+                //     let gyro_calibration_values = imu.calculate_drift_average();
+                //     imu.set_drift_calibration(gyro_calibration_values.clone());
+                //     log::info!("Gyro calibrated");
 
-                    log::info!("Calibrating Accelerometer");
-                    let accel_calibration_values = imu.calculate_deviation_average();
-                    imu.set_deviation_calibration(accel_calibration_values.clone());
-                    log::info!("Accelerometer calibrated");
-                    controllers_out_callback(MainControlLoopOutCommands::StoreSensorsCalibration(
-                        accel_calibration_values,
-                        gyro_calibration_values,
-                    ))
-                }
+                //     log::info!("Calibrating Accelerometer");
+                //     let accel_calibration_values = imu.calculate_deviation_average();
+                //     imu.set_deviation_calibration(accel_calibration_values.clone());
+                //     log::info!("Accelerometer calibrated");
+                //     controllers_out_callback(MainControlLoopOutCommands::StoreSensorsCalibration(
+                //         accel_calibration_values,
+                //         gyro_calibration_values,
+                //     ))
+                // }
 
                 FreeRtos::delay_ms(5);
                 continue;
@@ -120,9 +155,11 @@ pub fn start_flight_controllers(
         }
 
         // Calculate time since last iteration in seconds
-        let current_time_us = get_current_system_time();
-        let time_since_last_reading_seconds =
-            (current_time_us - previous_time_us) as f32 / US_IN_SECOND;
+        let current_execution_time = get_current_system_time();
+        let current_measurement_time_us = imu_measurement.measurement_time;
+        let time_since_last_measurement_seconds =
+            (current_measurement_time_us - previous_measurement_time_us) as f32 / US_IN_SECOND;
+        previous_measurement_time_us = current_measurement_time_us;
 
         let throttle: f32 = (input_values.throttle as f32 / u8::max_value() as f32)
             * (MAX_THROTTLE - MIN_POWER)
@@ -133,14 +170,13 @@ pub fn start_flight_controllers(
             yaw: -(input_values.yaw as f32 / i16::max_value() as f32) * MAX_ROTATION_RATE, //My controller is inverted, probably shouldn't do that there lol
         };
 
-        let (rotation_rates, acceleration_vector) = imu.get_combined_gyro_accel_output();
-        let acceleration_angles = acceleration_vector.calculate_orientation_angles();
+        let acceleration_angles = imu_measurement.acceleration.calculate_orientation_angles();
 
         let angle_flight_controller_input = AngleModeControllerInput {
-            measured_rotation_rate: RotationVector2D::from(&rotation_rates),
+            measured_rotation_rate: RotationVector2D::from(&imu_measurement.rotation_rates),
             measured_rotation: acceleration_angles.clone(),
             desired_rotation: RotationVector2D::from(&desired_rotation),
-            iteration_time: time_since_last_reading_seconds,
+            iteration_time: time_since_last_measurement_seconds,
         };
 
         let desired_rotation_rate_2d: RotationVector2D =
@@ -151,8 +187,8 @@ pub fn start_flight_controllers(
 
         let rotation_flight_controller_input = RotationRateControllerInput {
             desired_rotation_rate,
-            measured_rotation_rate: rotation_rates.clone(),
-            iteration_time: time_since_last_reading_seconds,
+            measured_rotation_rate: imu_measurement.rotation_rates.clone(),
+            iteration_time: time_since_last_measurement_seconds,
         };
 
         let controller_output =
@@ -160,15 +196,18 @@ pub fn start_flight_controllers(
 
         //Store telemetry data
         telemetry_data.loop_exec_time_us.store(
-            (current_time_us - previous_time_us) as i32,
+            (current_execution_time - previous_execution_time_us) as i32,
             Ordering::Relaxed,
         );
+
+        previous_execution_time_us = current_execution_time;
+
         telemetry_data
             .throttle
             .store(throttle as u8, Ordering::Relaxed);
-        telemetry_data.rotation_rate.store(rotation_rates);
-
-        previous_time_us = current_time_us;
+        telemetry_data
+            .rotation_rate
+            .store(imu_measurement.rotation_rates);
 
         controllers_out_callback(MainControlLoopOutCommands::UpdateFlightState(
             FlightStabilizerOut {

@@ -7,15 +7,17 @@ use esp_idf_svc::{
         gpio::Gpio34,
         peripheral::Peripheral,
     },
-    sys::adc_atten_t_ADC_ATTEN_DB_11,
+    sys::{adc_atten_t_ADC_ATTEN_DB_11, xTaskCreatePinnedToCore},
 };
 
 use crate::{
     config::{
         constants::{MAX_MOTOR_POWER, MIN_POWER, VEHICLE_TYPE},
-        store::{AppStoredConfig, ConfigStorage},
+        store::{AppStoredConfig, APP_CONFIG_STORE},
     },
-    control::control_loops::{start_flight_controllers, MainControlLoopOutCommands},
+    control::control_loops::{
+        start_flight_controller_processing_loop, start_imu_measurements_loop, MainControlLoopOutCommands,
+    },
     drivers::mpu_6050::{device::MPU6050Sensor, registers::LowPassFrequencyValues},
     get_i2c_driver,
     output::{
@@ -30,20 +32,18 @@ const VOLTAGE_DIVIDER_MULTIPLIER: f32 = 9.648; // 999k + 119k
 const ADC_1_VOLT: u16 = 672_u16;
 const MULTPLIER: f32 = (1.0 / ADC_1_VOLT as f32) * VOLTAGE_DIVIDER_MULTIPLIER;
 
-pub fn flight_thread() -> ! {
-    let controller_input_shared = &SHARED_CONTROLLER_INPUT;
-    let telemetry_shared = &SHARED_TELEMETRY;
+pub fn imu_measurements_task_start() -> ! {
     let peripherals_shared = &SHARED_PERIPHERALS;
 
     let mut peripherals_lock = peripherals_shared.lock().unwrap();
     let mut i2c_driver = get_i2c_driver(peripherals_lock.deref_mut());
     FreeRtos::delay_ms(50); //Wait for i2c to initialize
-    let mut motors_manager = QuadcopterMotorsStateManager::new(peripherals_lock.deref_mut());
     drop(peripherals_lock);
 
-    // let mut config_lock = APP_CONFIG_STORE.lock().unwrap();
-    let mut config_store = ConfigStorage::new();
+    let mut config_store = APP_CONFIG_STORE.lock().unwrap();
     let config_read_result = config_store.load_from_flash();
+    drop(config_store);
+
     let config = if config_read_result.is_err() {
         match config_read_result.err() {
             Some(e) => {
@@ -55,17 +55,52 @@ pub fn flight_thread() -> ! {
     } else {
         config_read_result.unwrap()
     };
-    // drop(config_lock);
 
-    let accelerometer_calibration = config.accelerometer_calibration;
-    let gyro_calibration = config.gyro_calibration;
-
-    // let accelrometer_calibration = AccelerationVector3D::default();
-    // let gyro_calibration = RotationVector3D::default();
-
-    let mut imu = MPU6050Sensor::new(&mut i2c_driver, gyro_calibration, accelerometer_calibration);
+    let mut imu = MPU6050Sensor::new(
+        &mut i2c_driver,
+        config.gyro_calibration,
+        config.accelerometer_calibration,
+    );
     imu.enable_low_pass_filter(LowPassFrequencyValues::Freq10Hz);
     imu.init();
+    start_imu_measurements_loop(imu)
+}
+
+pub fn flight_thread() -> ! {
+    let controller_input_shared = &SHARED_CONTROLLER_INPUT;
+    let telemetry_shared = &SHARED_TELEMETRY;
+    let peripherals_shared = &SHARED_PERIPHERALS;
+
+    let mut peripherals_lock = peripherals_shared.lock().unwrap();
+    // let mut i2c_driver = get_i2c_driver(peripherals_lock.deref_mut());
+    // FreeRtos::delay_ms(50); //Wait for i2c to initialize
+    let mut motors_manager = QuadcopterMotorsStateManager::new(peripherals_lock.deref_mut());
+    drop(peripherals_lock);
+
+    // // let mut config_lock = APP_CONFIG_STORE.lock().unwrap();
+    // let mut config_store = APP_CONFIG_STORE.lock().unwrap();
+    // let config_read_result = config_store.load_from_flash();
+    // drop(config_store);
+
+    // let config = if config_read_result.is_err() {
+    //     match config_read_result.err() {
+    //         Some(e) => {
+    //             log::error!("{:?}", e)
+    //         }
+    //         None => (),
+    //     };
+    //     AppStoredConfig::default()
+    // } else {
+    //     config_read_result.unwrap()
+    // };
+
+    // let mut imu = MPU6050Sensor::new(
+    //     &mut i2c_driver,
+    //     config.gyro_calibration,
+    //     config.accelerometer_calibration,
+    // );
+    // imu.enable_low_pass_filter(LowPassFrequencyValues::Freq10Hz);
+    // imu.init();
 
     let output_handler = match VEHICLE_TYPE {
         VehicleTypesMapper::Quadcopter => {
@@ -76,12 +111,13 @@ pub fn flight_thread() -> ! {
                     motors_manager.set_motor_power([throttle; 4]);
                 }
                 MainControlLoopOutCommands::StoreSensorsCalibration(accelerometer, gyro) => {
-                    // let mut config_lock = APP_CONFIG_STORE.lock().unwrap();
                     let config = AppStoredConfig {
                         accelerometer_calibration: accelerometer,
                         gyro_calibration: gyro,
                     };
+                    let mut config_store = APP_CONFIG_STORE.lock().unwrap();
                     let result = config_store.store_to_flash(config);
+                    drop(config_store);
                     if result.is_err() {
                         match result.err() {
                             Some(e) => {
@@ -92,7 +128,6 @@ pub fn flight_thread() -> ! {
                     } else {
                         result.unwrap();
                     }
-                    // drop(config_lock);
                 }
                 MainControlLoopOutCommands::UpdateFlightState(state) => {
                     let quad_out = quadcoper_movement_mapper
@@ -107,6 +142,8 @@ pub fn flight_thread() -> ! {
                         quad_out.motor_rear_left,
                     ];
 
+                    // #[cfg(debug_assertions)]
+                    // {
                     telemetry_shared
                         .motor_1_power
                         .store(mapped_to_motors_numbers[0] as u8, Ordering::Relaxed);
@@ -119,6 +156,7 @@ pub fn flight_thread() -> ! {
                     telemetry_shared
                         .motor_4_power
                         .store(mapped_to_motors_numbers[3] as u8, Ordering::Relaxed);
+                    // }
 
                     motors_manager.set_motor_power(mapped_to_motors_numbers);
                 }
@@ -126,12 +164,7 @@ pub fn flight_thread() -> ! {
         }
     };
 
-    start_flight_controllers(
-        controller_input_shared,
-        imu,
-        telemetry_shared,
-        output_handler,
-    );
+    start_flight_controller_processing_loop(controller_input_shared, telemetry_shared, output_handler)
 }
 
 pub fn telemetry_thread() {
