@@ -37,12 +37,11 @@ struct ImuMeasurement {
     acceleration: AccelerationVector3D,
 }
 
-pub static IMU_MEASUREMENTS_QUEUE: Lazy<Queue<ImuMeasurement>> =
-    Lazy::new(|| Queue::new(mem::size_of::<ImuMeasurement>()));
+static IMU_MEASUREMENTS_QUEUE: Lazy<Queue<ImuMeasurement>> = Lazy::new(|| Queue::new(3));
 
 pub enum MainControlLoopOutCommands {
     KillMotors,
-    UpdateFlightState(FlightStabilizerOut),
+    UpdateMotorsState(FlightStabilizerOut),
     BypassThrottle(f32),
     StoreSensorsCalibration(AccelerationVector3D, RotationVector3D),
 }
@@ -53,7 +52,7 @@ pub struct FlightStabilizerOut {
     pub rotation_output_command: RotationVector3D,
 }
 
-pub fn start_imu_measurements_loop(mut imu: MPU6050Sensor<I2cDriver<'_>>) ->! {
+pub fn start_imu_measurements_loop(mut imu: MPU6050Sensor<I2cDriver<'_>>) -> ! {
     loop {
         let (rotation_rates, acceleration) = imu.get_combined_gyro_accel_output();
         IMU_MEASUREMENTS_QUEUE
@@ -82,7 +81,6 @@ pub fn start_flight_controller_processing_loop(
         AngleModeFlightController::new(MAX_ROTATION_RATE, GYRO_DRIFT_DEG, ACCEL_UNCERTAINTY_DEG);
 
     let mut drone_on = false;
-
     loop {
         let imu_measurement = IMU_MEASUREMENTS_QUEUE.recv_front(BLOCK);
         let imu_measurement = match imu_measurement {
@@ -209,7 +207,7 @@ pub fn start_flight_controller_processing_loop(
             .rotation_rate
             .store(imu_measurement.rotation_rates);
 
-        controllers_out_callback(MainControlLoopOutCommands::UpdateFlightState(
+        controllers_out_callback(MainControlLoopOutCommands::UpdateMotorsState(
             FlightStabilizerOut {
                 rotation_output_command: controller_output,
                 throttle,

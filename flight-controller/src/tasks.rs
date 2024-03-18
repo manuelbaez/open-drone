@@ -7,16 +7,29 @@ use esp_idf_svc::{
         gpio::Gpio34,
         peripheral::Peripheral,
     },
-    sys::{adc_atten_t_ADC_ATTEN_DB_11, xTaskCreatePinnedToCore},
+    sys::adc_atten_t_ADC_ATTEN_DB_11,
+};
+
+#[cfg(feature = "ibus-controller")]
+use {
+    crate::communication_interfaces::ibus::controller::IBusController,
+    crate::communication_interfaces::ibus::telemetry::IBusTelemetry,
+};
+#[cfg(feature = "wifi")]
+use {
+    crate::communication_interfaces::wifi_control::WifiRemoteControl,
+    crate::config::constants::WIFI_CONTROLLER_CHANNEL,
 };
 
 use crate::{
+    communication_interfaces::controller::{RemoteControl, RemoteTelemetry},
     config::{
         constants::{MAX_MOTOR_POWER, MIN_POWER, VEHICLE_TYPE},
         store::{AppStoredConfig, APP_CONFIG_STORE},
     },
     control::control_loops::{
-        start_flight_controller_processing_loop, start_imu_measurements_loop, MainControlLoopOutCommands,
+        start_flight_controller_processing_loop, start_imu_measurements_loop,
+        MainControlLoopOutCommands,
     },
     drivers::mpu_6050::{device::MPU6050Sensor, registers::LowPassFrequencyValues},
     get_i2c_driver,
@@ -44,18 +57,13 @@ pub fn imu_measurements_task_start() -> ! {
     let config_read_result = config_store.load_from_flash();
     drop(config_store);
 
-    let config = if config_read_result.is_err() {
-        match config_read_result.err() {
-            Some(e) => {
-                log::error!("{:?}", e)
-            }
-            None => (),
-        };
-        AppStoredConfig::default()
-    } else {
-        config_read_result.unwrap()
+    let config = match config_read_result {
+        Ok(data) => data,
+        Err(error) => {
+            log::error!("{:?}", error);
+            AppStoredConfig::default()
+        }
     };
-
     let mut imu = MPU6050Sensor::new(
         &mut i2c_driver,
         config.gyro_calibration,
@@ -66,41 +74,15 @@ pub fn imu_measurements_task_start() -> ! {
     start_imu_measurements_loop(imu)
 }
 
-pub fn flight_thread() -> ! {
+pub fn flight_task_start() -> ! {
     let controller_input_shared = &SHARED_CONTROLLER_INPUT;
     let telemetry_shared = &SHARED_TELEMETRY;
     let peripherals_shared = &SHARED_PERIPHERALS;
 
     let mut peripherals_lock = peripherals_shared.lock().unwrap();
-    // let mut i2c_driver = get_i2c_driver(peripherals_lock.deref_mut());
-    // FreeRtos::delay_ms(50); //Wait for i2c to initialize
+
     let mut motors_manager = QuadcopterMotorsStateManager::new(peripherals_lock.deref_mut());
     drop(peripherals_lock);
-
-    // // let mut config_lock = APP_CONFIG_STORE.lock().unwrap();
-    // let mut config_store = APP_CONFIG_STORE.lock().unwrap();
-    // let config_read_result = config_store.load_from_flash();
-    // drop(config_store);
-
-    // let config = if config_read_result.is_err() {
-    //     match config_read_result.err() {
-    //         Some(e) => {
-    //             log::error!("{:?}", e)
-    //         }
-    //         None => (),
-    //     };
-    //     AppStoredConfig::default()
-    // } else {
-    //     config_read_result.unwrap()
-    // };
-
-    // let mut imu = MPU6050Sensor::new(
-    //     &mut i2c_driver,
-    //     config.gyro_calibration,
-    //     config.accelerometer_calibration,
-    // );
-    // imu.enable_low_pass_filter(LowPassFrequencyValues::Freq10Hz);
-    // imu.init();
 
     let output_handler = match VEHICLE_TYPE {
         VehicleTypesMapper::Quadcopter => {
@@ -129,7 +111,7 @@ pub fn flight_thread() -> ! {
                         result.unwrap();
                     }
                 }
-                MainControlLoopOutCommands::UpdateFlightState(state) => {
+                MainControlLoopOutCommands::UpdateMotorsState(state) => {
                     let quad_out = quadcoper_movement_mapper
                         .map_controller_output_to_actuators_input(
                             state.throttle,
@@ -164,10 +146,14 @@ pub fn flight_thread() -> ! {
         }
     };
 
-    start_flight_controller_processing_loop(controller_input_shared, telemetry_shared, output_handler)
+    start_flight_controller_processing_loop(
+        controller_input_shared,
+        telemetry_shared,
+        output_handler,
+    )
 }
 
-pub fn telemetry_thread() {
+pub fn telemetry_task_start() -> ! {
     let telemetry_data = &SHARED_TELEMETRY;
     loop {
         log::info!(
@@ -190,7 +176,7 @@ pub fn telemetry_thread() {
     }
 }
 
-pub fn measurements_thread() {
+pub fn measurements_task_start() {
     let mut peripherals_lock = SHARED_PERIPHERALS.lock().unwrap();
     let adc = unsafe { peripherals_lock.adc1.clone_unchecked() };
     let pin = unsafe { peripherals_lock.pins.gpio34.clone_unchecked() };
@@ -216,5 +202,32 @@ pub fn measurements_thread() {
             .battery_voltage
             .store(voltage, Ordering::Relaxed);
         FreeRtos::delay_ms(2000);
+    }
+}
+
+pub fn comms_task_start() {
+    #[cfg(feature = "wifi")]
+    {
+        let controller = WifiRemoteControl::new(WIFI_CONTROLLER_CHANNEL);
+        controller.init();
+        #[cfg(feature = "wifi-controller")]
+        controller.start_input_changes_monitor(&SHARED_CONTROLLER_INPUT);
+        #[cfg(feature = "wifi-tuning")]
+        controller.start_tuing_monitor();
+    }
+
+    #[cfg(all(not(feature = "wifi-controller"), feature = "ibus-controller"))]
+    {
+        let _telemetry: Result<std::thread::JoinHandle<()>, std::io::Error> =
+            std::thread::Builder::new().stack_size(4096).spawn(|| {
+                let mut peripherals_lock = SHARED_PERIPHERALS.lock().unwrap();
+                let telemetry_controller = IBusTelemetry::new(peripherals_lock.deref_mut());
+                drop(peripherals_lock);
+                telemetry_controller.start_telemetry_tx_loop(&SHARED_TELEMETRY);
+            });
+        let mut peripherals_lock = SHARED_PERIPHERALS.lock().unwrap();
+        let controller = IBusController::new(peripherals_lock.deref_mut());
+        drop(peripherals_lock);
+        controller.start_input_changes_monitor(&SHARED_CONTROLLER_INPUT)
     }
 }
