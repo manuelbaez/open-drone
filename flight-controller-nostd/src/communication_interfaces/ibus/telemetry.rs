@@ -1,8 +1,10 @@
 use embassy_time::Timer;
+use embedded_hal_nb::serial::Read;
 use esp_hal::clock::Clocks;
 use esp_hal::gpio::{InputPin, OutputPin};
 use esp_hal::peripheral::Peripheral;
-use esp_hal::{prelude::*, uart, Uart};
+use esp_hal::uart::Uart;
+use esp_hal::{prelude::*, uart, Blocking};
 
 use super::protocol::{
     IBusMessageParser, IBusUartMonitor, IbusCommands, IbusTelemetrySensorsIds, PROTOCOL_OVERHEAD,
@@ -50,7 +52,7 @@ impl TryFrom<u8> for ChannelMappings {
 }
 
 pub struct IBusTelemetry<'a, T> {
-    uart_driver: Uart<'a, T>,
+    uart_driver: Uart<'a, T, Blocking>,
     shared_telemetry: &'a AtomicTelemetry,
 }
 
@@ -67,7 +69,7 @@ where
     ) -> Self {
         let uart_config = uart::config::Config::default();
         let uart_pins = uart::TxRxPins::new_tx_rx(tx, rx);
-        let uart_driver = Uart::new_with_config(uart, uart_config, Some(uart_pins), clocks);
+        let uart_driver = Uart::new_with_config(uart, uart_config, Some(uart_pins), clocks, None);
         Self {
             uart_driver,
             shared_telemetry,

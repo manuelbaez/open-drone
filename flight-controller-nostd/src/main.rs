@@ -11,10 +11,15 @@ use esp_backtrace as _;
 use esp_hal::{
     clock::{ClockControl, Clocks},
     cpu_control::{CpuControl, Stack},
-    embassy::{self, executor::Executor},
+    delay::Delay,
+    embassy::{
+        self,
+        executor::{self, Executor},
+    },
+    gpio::IO,
     peripherals::Peripherals,
     prelude::*,
-    IO,
+    timer::TimerGroup,
 };
 
 use static_cell::StaticCell;
@@ -42,9 +47,9 @@ async fn main(spawner: Spawner) -> ! {
 
     let timer_group0 = esp_hal::timer::TimerGroup::new(peripherals.TIMG0, clocks);
     embassy::init(clocks, timer_group0);
-    let timer_group1 = esp_hal::timer::TimerGroup::new(peripherals.TIMG1, clocks);
-    let mut wdt1 = timer_group1.wdt;
-    wdt1.disable();
+    // let timer_group1 = esp_hal::timer::TimerGroup::new(peripherals.TIMG1, clocks);
+    // let mut wdt1 = timer_group1.wdt;
+    // wdt1.disable();
 
     let mut cpu_control = CpuControl::new(system.cpu_control);
 
@@ -53,19 +58,8 @@ async fn main(spawner: Spawner) -> ! {
 
     let io = IO::new(peripherals.GPIO, peripherals.IO_MUX);
 
-    // spawner.spawn(telemetry_task()).unwrap();
     spawner
-        .spawn(controller_input_task(
-            io.pins.gpio17,
-            io.pins.gpio16,
-            peripherals.UART2,
-            clocks,
-        ))
-        .unwrap();
-
-    let cpu1_fn = || {
-        // let mut delay = esp_hal::Delay::new(clocks);
-        flight_controller_task(
+        .spawn(flight_controller_task(
             peripherals.I2C0,
             io.pins.gpio21,
             io.pins.gpio22,
@@ -75,7 +69,25 @@ async fn main(spawner: Spawner) -> ! {
             io.pins.gpio14.into_push_pull_output(),
             io.pins.gpio27.into_push_pull_output(),
             clocks,
-        );
+        ))
+        .unwrap();
+
+    let cpu1_fn = || {
+        static CORE_1_EXECUTOR: StaticCell<Executor> = StaticCell::new();
+        let executor = CORE_1_EXECUTOR.init(Executor::new());
+
+        executor.run(|spawner| {
+            spawner.spawn(telemetry_task()).unwrap();
+            spawner
+                .spawn(controller_input_task(
+                    io.pins.gpio17,
+                    io.pins.gpio16,
+                    peripherals.UART2,
+                    clocks,
+                ))
+                .unwrap();
+        });
+        // let mut delay = esp_hal::Delay::new(clocks);
     };
     let _guard = cpu_control
         .start_app_core(unsafe { &mut APP_CORE_STACK }, cpu1_fn)
@@ -95,7 +107,7 @@ async fn main(spawner: Spawner) -> ! {
 //     let system = peripherals.SYSTEM.split();
 
 //     let clocks = ClockControl::max(system.clock_control).freeze();
-//     let mut delay = Delay::new(&clocks);
+//     // let mut delay = Delay::new(&clocks);
 //     esp_println::logger::init_logger_from_env();
 
 //     static CORE_0_EXECUTOR: StaticCell<Executor> = StaticCell::new();
@@ -104,13 +116,24 @@ async fn main(spawner: Spawner) -> ! {
 //     let timer_group = TimerGroup::new(peripherals.TIMG0, &clocks);
 //     embassy::init(&clocks, timer_group);
 
-//     core_0_executor.run(|spawner| {
+//     let io = IO::new(peripherals.GPIO, peripherals.IO_MUX);
+//     let clocks = CLOCKS.init(clocks);
 
+//     core_0_executor.run(|spawner| {
+//         spawner.spawn(telemetry_task()).unwrap();
+//         spawner
+//             .spawn(controller_input_task(
+//                 io.pins.gpio17,
+//                 io.pins.gpio16,
+//                 peripherals.UART2,
+//                 clocks,
+//             ))
+//             .unwrap();
 //     });
 
-//     // println!("Hello world!");
-//     loop {
-//         // println!("Loop...");
-//         delay.delay_ms(500u32);
-//     }
+//     // // println!("Hello world!");
+//     // loop {
+//     //     // println!("Loop...");
+//     //     delay.delay_ms(500u32);
+//     // }
 // }

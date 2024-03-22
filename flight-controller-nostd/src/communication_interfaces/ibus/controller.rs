@@ -6,14 +6,16 @@ use crate::{config::constants::UART_READ_BUF_SIZE, shared_core_values::AtomicCon
 
 use core::sync::atomic::Ordering;
 use embassy_time::Timer;
+use embedded_hal_nb::serial::Read;
 use esp_hal::{
     clock::Clocks,
     gpio::{InputPin, OutputPin},
     peripheral::Peripheral,
     prelude::*,
-    uart::{self},
-    Uart, UartRx,
+    uart::{self, Uart, UartRx},
+    Blocking,
 };
+
 use shared_definitions::controller::ControllerInput;
 
 #[repr(u8)]
@@ -46,7 +48,7 @@ impl TryFrom<u8> for ChannelMappings {
 }
 
 pub struct IBusController<'a, T> {
-    uart_driver: UartRx<'a, T>,
+    uart_driver: UartRx<'a, T, Blocking>,
     shared_controller_input: &'a AtomicControllerInput,
 }
 
@@ -63,7 +65,8 @@ where
     ) -> Self {
         let uart_config = uart::config::Config::default();
         let uart_pins = uart::TxRxPins::new_tx_rx(tx, rx);
-        let mut uart_driver = Uart::new_with_config(uart, uart_config, Some(uart_pins), clocks);
+        let mut uart_driver =
+            Uart::new_with_config(uart, uart_config, Some(uart_pins), clocks, None);
         // uart_driver.set_at_cmd(AtCmdConfig::new(None, None, None, 0x04, None));
         uart_driver
             .set_rx_fifo_full_threshold(UART_READ_BUF_SIZE as u16)

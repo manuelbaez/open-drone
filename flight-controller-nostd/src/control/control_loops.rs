@@ -41,11 +41,11 @@ pub struct FlightStabilizerOut {
     pub rotation_output_command: RotationVector3D,
 }
 
-pub fn start_flight_controllers<'a, I: i2c::Instance>(
+pub async fn start_flight_controllers<'a, I: i2c::Instance>(
     controller_input: &'a AtomicControllerInput,
     imu: &'a mut MPU6050Sensor<'a, I>,
     telemetry_data: &'a AtomicTelemetry,
-    mut delay: esp_hal::Delay,
+    mut delay: esp_hal::delay::Delay,
     mut controllers_out_callback: impl FnMut(MainControlLoopOutCommands) -> (),
 ) -> ! {
     let mut previous_time_us = 0_u64;
@@ -119,8 +119,8 @@ pub fn start_flight_controllers<'a, I: i2c::Instance>(
                     ))
                 }
 
-                delay.delay_ms(10_u32);
-                // Timer::after_millis(10).await;
+                // delay.delay_millis(10_u32);
+                Timer::after_millis(10).await;
                 continue;
             }
         }

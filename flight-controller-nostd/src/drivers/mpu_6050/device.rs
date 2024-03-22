@@ -8,6 +8,7 @@ use crate::{
     util::math::vectors::{AccelerationVector3D, RotationVector3D},
 };
 use embassy_time::{Duration, Timer};
+use embedded_hal::i2c::I2c;
 use esp_hal::{
     i2c::{self, I2C},
     prelude::*,
@@ -32,7 +33,7 @@ where
     gyro_drift_calibration: RotationVector3D,
     accelerometer_calibration: AccelerationVector3D,
     low_pass_filter_freq: LowPassFrequencyValues,
-    delay: esp_hal::Delay,
+    delay: esp_hal::delay::Delay,
 }
 
 impl<'a, I> MPU6050Sensor<'a, I>
@@ -43,7 +44,7 @@ where
         i2c_driver: &'a mut I2C<'a, I>,
         gyro_drift_calibration: RotationVector3D,
         accelerometer_calibration: AccelerationVector3D,
-        delay: esp_hal::Delay,
+        delay: esp_hal::delay::Delay,
     ) -> Self {
         MPU6050Sensor {
             i2c_driver,
@@ -57,19 +58,19 @@ where
         }
     }
 
-    pub fn init(&mut self) {
+    pub async fn init(&mut self) {
         self.update_gyro_config_register();
-        self.delay.delay_ms(100_u32);
-        // Timer::after_millis(100).await;
+        // self.delay.delay_millis(100_u32);
+        Timer::after_millis(100).await;
         self.update_accel_config_register();
-        self.delay.delay_ms(100_u32);
-        // Timer::after_millis(100).await;
+        // self.delay.delay_millis(100_u32);
+        Timer::after_millis(100).await;
         self.set_power_management_register_default();
-        self.delay.delay_ms(500_u32);
-        // Timer::after_millis(500).await;
+        // self.delay.delay_millis(500_u32);
+        Timer::after_millis(500).await;
         self.update_dlpf_filter_register();
-        self.delay.delay_ms(100_u32);
-        // Timer::after_millis(100).await;
+        // self.delay.delay_millis(100_u32);
+        Timer::after_millis(100).await;
     }
 
     pub fn enable_low_pass_filter(&mut self, low_pass_freq: LowPassFrequencyValues) {
