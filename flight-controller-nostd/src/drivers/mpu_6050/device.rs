@@ -33,7 +33,6 @@ where
     gyro_drift_calibration: RotationVector3D,
     accelerometer_calibration: AccelerationVector3D,
     low_pass_filter_freq: LowPassFrequencyValues,
-    delay: esp_hal::delay::Delay,
 }
 
 impl<'a, I> MPU6050Sensor<'a, I>
@@ -44,7 +43,6 @@ where
         i2c_driver: &'a mut I2C<'a, I>,
         gyro_drift_calibration: RotationVector3D,
         accelerometer_calibration: AccelerationVector3D,
-        delay: esp_hal::delay::Delay,
     ) -> Self {
         MPU6050Sensor {
             i2c_driver,
@@ -54,22 +52,17 @@ where
             accel_sensitivity: MpuAccelSensitivityRanges::ACCEL_RANGE_2G,
             gyro_sensitivity: MpuGyroSensitivityRanges::GYRO_RANGE_500,
             low_pass_filter_freq: LowPassFrequencyValues::None,
-            delay,
         }
     }
 
     pub async fn init(&mut self) {
         self.update_gyro_config_register();
-        // self.delay.delay_millis(100_u32);
         Timer::after_millis(100).await;
         self.update_accel_config_register();
-        // self.delay.delay_millis(100_u32);
         Timer::after_millis(100).await;
         self.set_power_management_register_default();
-        // self.delay.delay_millis(500_u32);
         Timer::after_millis(500).await;
         self.update_dlpf_filter_register();
-        // self.delay.delay_millis(100_u32);
         Timer::after_millis(100).await;
     }
 
@@ -93,7 +86,7 @@ where
         self.update_accel_config_register();
     }
 
-    pub fn reset_device(&mut self) {
+    pub async fn reset_device(&mut self) {
         let register_value = MpuPowerManagementRegister::new()
             .with_device_reset(true)
             .with_sleep(true)
@@ -101,7 +94,7 @@ where
         self.i2c_driver
             .write(self.mpu_addr, &[MPURegisters::GYRO_CONFIG, register_value])
             .unwrap();
-        // Timer::after_micros(200).await;
+        Timer::after_micros(200).await;
     }
 
     fn update_gyro_config_register(&mut self) {

@@ -125,19 +125,12 @@ where
                 if current_index < PROTOCOL_SIZE {
                     raw_message_buffer[current_index] = read_byte;
                 }
-                // esp_println::println!("{}-{}", current_index, current_message_size);
 
                 //Message read completed process the message buffer
                 if !buffer_processed
                     && (current_index >= (PROTOCOL_SIZE - 1)
                         || current_index >= (current_message_size - 1))
                 {
-                    // esp_println::println!(
-                    //     "Message Received {} - {} - {:?}",
-                    //     current_index,
-                    //     current_message_size,
-                    //     raw_message_buffer
-                    // );
                     buffer_processed = true;
                     let parsing_result =
                         IBusMessageParser::extract_and_validate_message_content(raw_message_buffer);

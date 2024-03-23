@@ -34,6 +34,15 @@ const US_IN_SECOND: f32 = 1_000_000.0_f32;
 static I2C_DRIVER: StaticCell<I2C<'_, <I2C0 as Peripheral>::P>> = StaticCell::new();
 static IMU_DRIVER: StaticCell<MPU6050Sensor<'_, <I2C0 as Peripheral>::P>> = StaticCell::new();
 
+// #[embassy_executor::task]
+// pub async fn imu_measurements_task(
+//     i2c_dev: I2C0,
+//     sda: Gpio21<Unknown>,
+//     scl: Gpio22<Unknown>,
+//     clocks: &'static Clocks<'static>,
+// ) {
+// }
+
 #[embassy_executor::task]
 pub async fn flight_controller_task(
     i2c_dev: I2C0,
@@ -82,12 +91,11 @@ pub async fn flight_controller_task(
         i2c_driver,
         gyro_calibration,
         accelerometer_calibration,
-        esp_hal::delay::Delay::new(clocks),
     ));
-    imu.reset_device();
+    imu.reset_device().await;
     imu.enable_low_pass_filter(LowPassFrequencyValues::Freq10Hz);
     imu.init().await; // Check why this was giving a Load prohibited when was async
-                // Timer::after_micros(200).await;
+                      // Timer::after_micros(200).await;
 
     let output_handler = match VEHICLE_TYPE {
         VehicleTypesMapper::Quadcopter => {
@@ -148,14 +156,15 @@ pub async fn flight_controller_task(
             }
         }
     };
-    
+
     start_flight_controllers(
         controller_input_shared,
         imu,
         telemetry_shared,
         esp_hal::delay::Delay::new(clocks),
         output_handler,
-    ).await
+    )
+    .await
 }
 
 #[embassy_executor::task]

@@ -6,24 +6,18 @@
 
 use embassy_executor::Spawner;
 use embassy_time::Timer;
-use embedded_hal_async::delay;
 use esp_backtrace as _;
 use esp_hal::{
     clock::{ClockControl, Clocks},
     cpu_control::{CpuControl, Stack},
-    delay::Delay,
-    embassy::{
-        self,
-        executor::{self, Executor},
-    },
+    embassy::{self, executor::Executor},
     gpio::IO,
     peripherals::Peripherals,
     prelude::*,
-    timer::TimerGroup,
 };
 
 use static_cell::StaticCell;
-use threads::{controller_input_task, flight_controller_task, telemetry_task};
+use tasks::{controller_input_task, flight_controller_task, telemetry_task};
 
 mod communication_interfaces;
 mod config;
@@ -31,7 +25,7 @@ mod control;
 mod drivers;
 mod output;
 mod shared_core_values;
-mod threads;
+mod tasks;
 mod util;
 
 static CLOCKS: StaticCell<Clocks> = StaticCell::new();
