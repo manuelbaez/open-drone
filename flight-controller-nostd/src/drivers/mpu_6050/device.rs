@@ -152,9 +152,18 @@ where
         let mut gyro_output = Mpu6050GyroRegOut::default();
         let mut buf: [u8; 6] = [0; 6];
 
-        self.i2c_driver
-            .write_read(self.mpu_addr, &[MPURegisters::GYRO_MEASURE_START], &mut buf)
-            .ok();
+        let result = self.i2c_driver.write_read(
+            self.mpu_addr,
+            &[MPURegisters::GYRO_MEASURE_START],
+            &mut buf,
+        );
+
+        match result {
+            Ok(_) => (),
+            Err(err) => {
+                esp_println::println!("{:?}", err)
+            }
+        }
 
         gyro_output.x = (buf[0] as i16) << 8 | buf[1] as i16;
         gyro_output.y = (buf[2] as i16) << 8 | buf[3] as i16;

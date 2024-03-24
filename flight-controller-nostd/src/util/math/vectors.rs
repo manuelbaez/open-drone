@@ -85,21 +85,21 @@ impl Sub<RotationVector3D> for RotationVector3D {
 }
 
 impl AddAssign<RotationVector3D> for RotationVector3D {
-    fn add_assign(&mut self, rhs: RotationVector3D) {
-        self.pitch += rhs.pitch;
-        self.roll += rhs.roll;
-        self.yaw += rhs.yaw;
+    fn add_assign(&mut self, other: RotationVector3D) {
+        self.pitch += other.pitch;
+        self.roll += other.roll;
+        self.yaw += other.yaw;
     }
 }
 
 impl Div<f32> for RotationVector3D {
     type Output = RotationVector3D;
 
-    fn div(self, rhs: f32) -> Self::Output {
+    fn div(self, devider: f32) -> Self::Output {
         Self {
-            pitch: self.pitch / rhs,
-            roll: self.roll / rhs,
-            yaw: self.yaw / rhs,
+            pitch: self.pitch / devider,
+            roll: self.roll / devider,
+            yaw: self.yaw / devider,
         }
     }
 }

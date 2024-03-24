@@ -105,12 +105,12 @@ pub async fn start_flight_controllers<'a, I: i2c::Instance>(
 
                 if input_values.calibrate_sensors {
                     esp_println::println!("Calibrating gyro");
-                    let gyro_calibration_values = imu.calculate_drift_average();
+                    let gyro_calibration_values = imu.calculate_drift_average().await;
                     imu.set_drift_calibration(gyro_calibration_values.clone());
-                    esp_println::println!("Gyro calibrated");
+                    esp_println::println!("Gyro calibrated {:?}", gyro_calibration_values.clone());
 
                     esp_println::println!("Calibrating Accelerometer");
-                    let accel_calibration_values = imu.calculate_deviation_average();
+                    let accel_calibration_values = imu.calculate_deviation_average().await;
                     imu.set_deviation_calibration(accel_calibration_values.clone());
                     esp_println::println!("Accelerometer calibrated");
                     controllers_out_callback(MainControlLoopOutCommands::StoreSensorsCalibration(

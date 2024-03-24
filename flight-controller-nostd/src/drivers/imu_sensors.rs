@@ -1,16 +1,19 @@
+use embassy_time::Timer;
+
 use crate::util::math::vectors::{AccelerationVector3D, RotationVector3D};
 
 pub trait Accelerometer {
     fn get_acceleration_vector_uncalibrated(&mut self) -> AccelerationVector3D;
     fn get_acceleration_vector(&mut self) -> AccelerationVector3D;
     ///To run this the accelerometer must be in a completely horizontal surface
-    fn calculate_deviation_average(&mut self) -> AccelerationVector3D {
+    async fn calculate_deviation_average(&mut self) -> AccelerationVector3D {
         let mut acceleration_accumulator = AccelerationVector3D::default();
         let mut count = 0.0_f32;
-        while count < 4000.0 {
+        while count < 2000.0 {
             let acceleration = self.get_acceleration_vector_uncalibrated();
             acceleration_accumulator += acceleration;
             count += 1.0;
+            Timer::after_millis(1).await;
         }
         let mut result = acceleration_accumulator / count;
         result.z = 0.0;
@@ -24,16 +27,16 @@ pub trait Gyroscope {
     fn get_rotation_rates_uncalibrated(&mut self) -> RotationVector3D;
     fn get_rotation_rates(&mut self) -> RotationVector3D;
     ///To run this the gyro must be completely still
-    fn calculate_drift_average(&mut self) -> RotationVector3D {
+    async fn calculate_drift_average(&mut self) -> RotationVector3D {
         let mut rotation_rate_accumulator = RotationVector3D::default();
-        let mut count = 0.0_f32;
-        while count < 4000.0 {
+        let mut count = 0_u16;
+        while count < 2000 {
             let rotation_rate = self.get_rotation_rates_uncalibrated();
             rotation_rate_accumulator += rotation_rate;
-            count += 1.0;
-            // sleep(Duration::from_millis(2));
+            count += 1;
+            Timer::after_millis(1).await;
         }
-        rotation_rate_accumulator / count
+        rotation_rate_accumulator / count as f32
     }
 
     fn set_drift_calibration(&mut self, claibration: RotationVector3D);

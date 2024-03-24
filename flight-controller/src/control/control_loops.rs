@@ -53,14 +53,16 @@ pub struct FlightStabilizerOut {
 }
 
 pub fn start_imu_measurements_loop(mut imu: MPU6050Sensor<I2cDriver<'_>>) -> ! {
+    let mut acceleration = AccelerationVector3D::default();
     loop {
-        let (rotation_rates, acceleration) = imu.get_combined_gyro_accel_output();
+        // let (rotation_rates, acceleration) = imu.get_combined_gyro_accel_output();
+        let rotation_rates = imu.get_rotation_rates();
         IMU_MEASUREMENTS_QUEUE
             .send_back(
                 ImuMeasurement {
                     measurement_time: get_current_system_time(),
                     rotation_rates,
-                    acceleration,
+                    acceleration: acceleration.clone(),
                 },
                 0,
             )
