@@ -9,6 +9,8 @@ use esp_idf_svc::hal::{
 
 use crate::config::constants::{ESC_PWM_FREQUENCY_HZ, MAX_MOTOR_DUTY, MIN_MOTOR_DUTY};
 
+const MOTOR_DUTY_MULTIPLIER: f32 = ((MAX_MOTOR_DUTY - MIN_MOTOR_DUTY) as f32) / 100.0_f32;
+
 pub struct MotorConfig<TPin, TTimer, TChannel>
 where
     TPin: Peripheral + 'static,
@@ -55,8 +57,7 @@ impl MotorController {
     }
 
     pub fn set_motor_speed(&mut self, speed: f32) {
-        let duty = (((MAX_MOTOR_DUTY - MIN_MOTOR_DUTY) as f32) * speed / 100.0_f32
-            + MIN_MOTOR_DUTY as f32) as u32;
+        let duty = (MOTOR_DUTY_MULTIPLIER * speed + MIN_MOTOR_DUTY as f32) as u32;
         let _ = self.motor_driver.set_duty(duty).unwrap();
     }
 }

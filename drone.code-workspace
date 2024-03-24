@@ -9,8 +9,16 @@
       "path": "./flight-controller"
     },
     {
-      "name": "Controller",
+      "name": "Flight Controller nostd",
+      "path": "./flight-controller-nostd"
+    },
+    {
+      "name": "Wifi Controller",
       "path": "./controller-transmitter"
+    },
+    {
+      "name": "Video Transmitter",
+      "path": "./video-transmitter"
     },
     {
       "name": "Shared Definitions",
@@ -23,6 +31,9 @@
     "rust-analyzer.cargo.features": [],
     "rust-analyzer.checkOnSave": true,
     "rust-analyzer.cargo.buildScripts.overrideCommand": null,
+    "editor.semanticTokenColorCustomizations": {
+      "enabled": true
+    },
     // "rust-analyzer.cargo.target": "stable-x86_64-unknown-linux-gnu",
     "files.exclude": {
       "**/.git": true,

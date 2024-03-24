@@ -86,3 +86,4 @@ https://users.rust-lang.org/t/weird-behaviour-reading-from-a-linux-device-event-
 https://gitlab.com/timwilkinson/FlySkyIBus/-/blob/master/FlySkyIBus.h?ref_type=heads
 https://github.com/bmellink/IBusBM
 https://github.com/betaflight/betaflight/blob/master/src/main/telemetry/ibus_shared.h#L41
+https://esp-rs.github.io/esp-idf-svc/esp_idf_svc/nvs/struct.EspNvsPartition.html

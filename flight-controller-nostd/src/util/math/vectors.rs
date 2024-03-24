@@ -1,8 +1,8 @@
-use std::ops::{Add, AddAssign, Div, Sub};
+use core::ops::{Add, AddAssign, Div, Sub};
 
-use libm::{atan2f, sqrtf};
+use libm::{atan2f, powf, sqrtf};
 
-#[derive(Debug, Default, Clone, Copy)]
+#[derive(Debug, Default, Clone)]
 pub struct AccelerationVector3D {
     pub x: f32,
     pub y: f32,
@@ -11,8 +11,8 @@ pub struct AccelerationVector3D {
 
 impl AccelerationVector3D {
     pub fn calculate_orientation_angles(&self) -> RotationVector2D {
-        let roll = atan2f(self.y, sqrtf(self.x.powf(2.0) + self.z.powf(2.0)));
-        let pitch = atan2f(self.x, sqrtf(self.y.powf(2.0) + self.z.powf(2.0)));
+        let roll = atan2f(self.y, sqrtf(powf(self.x, 2.0) + powf(self.z, 2.0)));
+        let pitch = atan2f(self.x, sqrtf(powf(self.y, 2.0) + powf(self.z, 2.0)));
 
         RotationVector2D {
             roll: roll.to_degrees(),
@@ -53,7 +53,7 @@ impl Div<f32> for AccelerationVector3D {
     }
 }
 
-#[derive(Debug, Default, Copy)]
+#[derive(Debug, Default)]
 pub struct RotationVector3D {
     pub pitch: f32,
     pub roll: f32,
@@ -85,21 +85,21 @@ impl Sub<RotationVector3D> for RotationVector3D {
 }
 
 impl AddAssign<RotationVector3D> for RotationVector3D {
-    fn add_assign(&mut self, rhs: RotationVector3D) {
-        self.pitch += rhs.pitch;
-        self.roll += rhs.roll;
-        self.yaw += rhs.yaw;
+    fn add_assign(&mut self, other: RotationVector3D) {
+        self.pitch += other.pitch;
+        self.roll += other.roll;
+        self.yaw += other.yaw;
     }
 }
 
 impl Div<f32> for RotationVector3D {
     type Output = RotationVector3D;
 
-    fn div(self, rhs: f32) -> Self::Output {
+    fn div(self, devider: f32) -> Self::Output {
         Self {
-            pitch: self.pitch / rhs,
-            roll: self.roll / rhs,
-            yaw: self.yaw / rhs,
+            pitch: self.pitch / devider,
+            roll: self.roll / devider,
+            yaw: self.yaw / devider,
         }
     }
 }

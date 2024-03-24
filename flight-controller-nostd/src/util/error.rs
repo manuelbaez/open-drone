@@ -1,11 +1,7 @@
-use core::fmt;
-use std::fmt::{Debug, Display, Formatter};
+use core::fmt::{self, Debug, Display, Formatter};
 
 #[derive(Debug)]
-pub struct AppError<E>
-where
-    E: Debug,
-{
+pub struct AppError<E> {
     pub message: &'static str,
     pub error: E,
 }

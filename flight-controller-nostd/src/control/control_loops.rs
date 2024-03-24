@@ -1,10 +1,14 @@
-use std::{mem, sync::atomic::Ordering};
+use core::sync::atomic::Ordering;
 
-use esp_idf_svc::hal::delay::BLOCK;
-use esp_idf_svc::hal::{delay::FreeRtos, i2c::I2cDriver, task::queue::Queue};
-use once_cell::sync::Lazy;
+use embassy_time::Timer;
+
+use esp_hal::{i2c, prelude::*};
 use shared_definitions::controller::ControllerInput;
 
+use crate::drivers::{
+    imu_sensors::{CombinedGyroscopeAccelerometer, Gyroscope},
+    mpu_6050::device::MPU6050Sensor,
+};
 use crate::{
     config::constants::{
         ACCEL_UNCERTAINTY_DEG, GYRO_DRIFT_DEG, MAX_INCLINATION, MAX_ROTATION_RATE, MAX_THROTTLE,
@@ -16,32 +20,17 @@ use crate::{
     },
     shared_core_values::{AtomicControllerInput, AtomicTelemetry},
     util::math::vectors::{AccelerationVector3D, RotationVector2D},
+    util::time::get_current_system_time_us,
 };
 use crate::{drivers::imu_sensors::Accelerometer, util::math::vectors::RotationVector3D};
-use crate::{
-    drivers::{
-        imu_sensors::{CombinedGyroscopeAccelerometer, Gyroscope},
-        mpu_6050::device::MPU6050Sensor,
-    },
-    util::time::get_current_system_time,
-};
 #[cfg(feature = "wifi-tuning")]
 use {crate::shared_core_values::SHARED_TUNING, shared_definitions::controller::PIDTuneInput};
 
 const US_IN_SECOND: f32 = 1_000_000.0_f32;
 
-#[derive(Clone, Copy)]
-struct ImuMeasurement {
-    measurement_time: i64,
-    rotation_rates: RotationVector3D,
-    acceleration: AccelerationVector3D,
-}
-
-static IMU_MEASUREMENTS_QUEUE: Lazy<Queue<ImuMeasurement>> = Lazy::new(|| Queue::new(3));
-
 pub enum MainControlLoopOutCommands {
     KillMotors,
-    UpdateMotorsState(FlightStabilizerOut),
+    UpdateFlightState(FlightStabilizerOut),
     BypassThrottle(f32),
     StoreSensorsCalibration(AccelerationVector3D, RotationVector3D),
 }
@@ -52,46 +41,24 @@ pub struct FlightStabilizerOut {
     pub rotation_output_command: RotationVector3D,
 }
 
-pub fn start_imu_measurements_loop(mut imu: MPU6050Sensor<I2cDriver<'_>>) -> ! {
-    let mut acceleration = AccelerationVector3D::default();
-    loop {
-        // let (rotation_rates, acceleration) = imu.get_combined_gyro_accel_output();
-        let rotation_rates = imu.get_rotation_rates();
-        IMU_MEASUREMENTS_QUEUE
-            .send_back(
-                ImuMeasurement {
-                    measurement_time: get_current_system_time(),
-                    rotation_rates,
-                    acceleration: acceleration.clone(),
-                },
-                0,
-            )
-            .ok();
-    }
-}
-
-pub fn start_flight_controller_processing_loop(
-    controller_input: &AtomicControllerInput,
-    telemetry_data: &AtomicTelemetry,
+pub async fn start_flight_controllers<'a, I: i2c::Instance>(
+    controller_input: &'a AtomicControllerInput,
+    imu: &'a mut MPU6050Sensor<'a, I>,
+    telemetry_data: &'a AtomicTelemetry,
+    mut delay: esp_hal::delay::Delay,
     mut controllers_out_callback: impl FnMut(MainControlLoopOutCommands) -> (),
 ) -> ! {
-    let mut previous_measurement_time_us = 0_i64;
-    let mut previous_execution_time_us = 0_i64;
+    let mut previous_time_us = 0_u64;
 
     let mut rotation_mode_flight_controller = RotationRateFlightController::new();
     let mut angle_flight_controller =
         AngleModeFlightController::new(MAX_ROTATION_RATE, GYRO_DRIFT_DEG, ACCEL_UNCERTAINTY_DEG);
 
     let mut drone_on = false;
+
     loop {
-        let imu_measurement = IMU_MEASUREMENTS_QUEUE.recv_front(BLOCK);
-        let imu_measurement = match imu_measurement {
-            Some(measurement) => measurement.0,
-            None => {
-                continue;
-            }
-        };
-        //Read remote control input values
+        // let time_a = get_current_system_time_us();
+        // Read remote control input values
         let input_values = ControllerInput {
             roll: controller_input.roll.load(Ordering::Relaxed),
             pitch: controller_input.pitch.load(Ordering::Relaxed),
@@ -102,6 +69,9 @@ pub fn start_flight_controller_processing_loop(
             calibrate_esc: controller_input.calibrate_esc.load(Ordering::Relaxed),
             calibrate_sensors: controller_input.calibrate_sensors.load(Ordering::Relaxed),
         };
+
+        // let mut input_values = ControllerInput::default();
+        // input_values.start = true;
 
         #[cfg(feature = "wifi-tuning")]
         {
@@ -133,34 +103,34 @@ pub fn start_flight_controller_processing_loop(
                     ));
                 }
 
-                // if input_values.calibrate_sensors {
-                //     log::info!("Calibrating gyro");
-                //     let gyro_calibration_values = imu.calculate_drift_average();
-                //     imu.set_drift_calibration(gyro_calibration_values.clone());
-                //     log::info!("Gyro calibrated");
+                if input_values.calibrate_sensors {
+                    esp_println::println!("Calibrating gyro");
+                    let gyro_calibration_values = imu.calculate_drift_average().await;
+                    imu.set_drift_calibration(gyro_calibration_values.clone());
+                    esp_println::println!("Gyro calibrated {:?}", gyro_calibration_values.clone());
 
-                //     log::info!("Calibrating Accelerometer");
-                //     let accel_calibration_values = imu.calculate_deviation_average();
-                //     imu.set_deviation_calibration(accel_calibration_values.clone());
-                //     log::info!("Accelerometer calibrated");
-                //     controllers_out_callback(MainControlLoopOutCommands::StoreSensorsCalibration(
-                //         accel_calibration_values,
-                //         gyro_calibration_values,
-                //     ))
-                // }
+                    esp_println::println!("Calibrating Accelerometer");
+                    let accel_calibration_values = imu.calculate_deviation_average().await;
+                    imu.set_deviation_calibration(accel_calibration_values.clone());
+                    esp_println::println!("Accelerometer calibrated");
+                    controllers_out_callback(MainControlLoopOutCommands::StoreSensorsCalibration(
+                        accel_calibration_values,
+                        gyro_calibration_values,
+                    ))
+                }
 
-                FreeRtos::delay_ms(5);
+                // delay.delay_millis(10_u32);
+                Timer::after_millis(10).await;
                 continue;
             }
         }
 
         // Calculate time since last iteration in seconds
-        let current_execution_time = get_current_system_time();
-        let current_measurement_time_us = imu_measurement.measurement_time;
-        let time_since_last_measurement_seconds =
-            (current_measurement_time_us - previous_measurement_time_us) as f32 / US_IN_SECOND;
-        previous_measurement_time_us = current_measurement_time_us;
+        let current_time_us = get_current_system_time_us();
+        let time_since_last_reading_seconds =
+            (current_time_us - previous_time_us) as f32 / US_IN_SECOND;
 
+        // esp_println::println!("From Control Loop {}", current_time_us - previous_time_us);
         let throttle: f32 = (input_values.throttle as f32 / u8::max_value() as f32)
             * (MAX_THROTTLE - MIN_POWER)
             + MIN_POWER;
@@ -170,13 +140,14 @@ pub fn start_flight_controller_processing_loop(
             yaw: -(input_values.yaw as f32 / i16::max_value() as f32) * MAX_ROTATION_RATE, //My controller is inverted, probably shouldn't do that there lol
         };
 
-        let acceleration_angles = imu_measurement.acceleration.calculate_orientation_angles();
+        let (rotation_rates, acceleration_vector) = imu.get_combined_gyro_accel_output();
+        let acceleration_angles = acceleration_vector.calculate_orientation_angles();
 
         let angle_flight_controller_input = AngleModeControllerInput {
-            measured_rotation_rate: RotationVector2D::from(&imu_measurement.rotation_rates),
+            measured_rotation_rate: RotationVector2D::from(&rotation_rates),
             measured_rotation: acceleration_angles.clone(),
             desired_rotation: RotationVector2D::from(&desired_rotation),
-            iteration_time: time_since_last_measurement_seconds,
+            iteration_time: time_since_last_reading_seconds,
         };
 
         let desired_rotation_rate_2d: RotationVector2D =
@@ -187,33 +158,34 @@ pub fn start_flight_controller_processing_loop(
 
         let rotation_flight_controller_input = RotationRateControllerInput {
             desired_rotation_rate,
-            measured_rotation_rate: imu_measurement.rotation_rates.clone(),
-            iteration_time: time_since_last_measurement_seconds,
+            measured_rotation_rate: rotation_rates.clone(),
+            iteration_time: time_since_last_reading_seconds,
         };
 
         let controller_output =
             rotation_mode_flight_controller.get_next_output(rotation_flight_controller_input);
 
-        //Store telemetry data
+        // let time_b = get_current_system_time_us();
+
+        // Store debug/telemetry data
         telemetry_data.loop_exec_time_us.store(
-            (current_execution_time - previous_execution_time_us) as i32,
+            (current_time_us - previous_time_us) as i32,
             Ordering::Relaxed,
         );
-
-        previous_execution_time_us = current_execution_time;
-
         telemetry_data
             .throttle
             .store(throttle as u8, Ordering::Relaxed);
-        telemetry_data
-            .rotation_rate
-            .store(imu_measurement.rotation_rates);
+        telemetry_data.rotation_rate.store(rotation_rates);
 
-        controllers_out_callback(MainControlLoopOutCommands::UpdateMotorsState(
+        previous_time_us = current_time_us;
+
+        controllers_out_callback(MainControlLoopOutCommands::UpdateFlightState(
             FlightStabilizerOut {
                 rotation_output_command: controller_output,
                 throttle,
             },
         ));
+        // delay.delay_ms(8_u32);
+        // Timer::after_micros(1000).await;
     }
 }
